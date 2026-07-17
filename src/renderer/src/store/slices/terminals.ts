@@ -35,6 +35,11 @@ import {
 } from '../../../../shared/stable-pane-id'
 import { isValidHostTerminalTabId, isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
 import {
+  collectPaneIds,
+  pruneWorkspaceSplitLayout,
+  workspaceSplitContainsPane
+} from './workspace-split-view'
+import {
   getRepoIdFromWorktreeId,
   splitWorktreeIdForFilesystem
 } from '../../../../shared/worktree-id'
@@ -3402,10 +3407,32 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
         nextEverActivated.add(activeWorktreeId)
       }
 
+      // Why: restore side-by-side panes only when the flag is on and the tree
+      // still resolves; unknown leaves are pruned and a focus outside the
+      // panes collapses to single view rather than rendering orphan panes.
+      const restoredWorkspaceSplitLayout = (() => {
+        const persisted = session.workspaceSplitLayoutOnShutdown
+        if (!persisted || s.settings?.experimentalSideBySideWorkspaces !== true) {
+          return null
+        }
+        const staleLeafIds = new Set(
+          collectPaneIds(persisted).filter((paneId) => !validWorktreeIds.has(paneId))
+        )
+        const pruned = pruneWorkspaceSplitLayout(persisted, staleLeafIds)
+        if (!pruned) {
+          return null
+        }
+        if (activeWorktreeId && !workspaceSplitContainsPane(pruned, activeWorktreeId)) {
+          return null
+        }
+        return pruned
+      })()
+
       return {
         activeRepoId,
         activeWorktreeId,
         activeWorkspaceKey,
+        workspaceSplitLayout: restoredWorkspaceSplitLayout,
         activeTabId,
         activeTabIdByWorktree,
         restoredRuntimeHostIdByWorkspaceSessionKey:

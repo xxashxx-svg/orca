@@ -362,8 +362,31 @@ function Terminal(): React.JSX.Element | null {
     for (const portal of activityTerminalPortals) {
       ids.add(portal.tabId)
     }
+    // Why: with side-by-side panes every visible pane's group-active terminals
+    // are on screen; hibernation must not treat them as background.
+    if (workspaceSplitLayout && activeView === 'terminal') {
+      const unifiedTabsByWorktree = useAppStore.getState().unifiedTabsByWorktree
+      for (const paneId of collectPaneIds(workspaceSplitLayout)) {
+        const unifiedTabById = new Map(
+          (unifiedTabsByWorktree[paneId] ?? []).map((unifiedTab) => [unifiedTab.id, unifiedTab])
+        )
+        for (const group of groupsByWorktree[paneId] ?? []) {
+          const activeUnifiedTab = group.activeTabId ? unifiedTabById.get(group.activeTabId) : null
+          if (activeUnifiedTab?.contentType === 'terminal') {
+            ids.add(activeUnifiedTab.entityId)
+          }
+        }
+      }
+    }
     return Array.from(ids)
-  }, [activeTabId, activeTabType, activeView, activityTerminalPortals])
+  }, [
+    activeTabId,
+    activeTabType,
+    activeView,
+    activityTerminalPortals,
+    groupsByWorktree,
+    workspaceSplitLayout
+  ])
 
   useEffect(() => {
     // Why: hibernation must treat terminals portaled into foreground surfaces
@@ -830,7 +853,9 @@ function Terminal(): React.JSX.Element | null {
   const activationDeferredMountTabIdsByWorktreeRef = useRef(new Map<string, ReadonlySet<string>>())
   // Why: the cold-activation deferral decision must run once per activation
   // transition, not on every re-render of an already-active worktree.
-  const lastActivationWorktreeIdRef = useRef<string | null>(null)
+  // Why a set: with side-by-side panes several worktrees are visible at once;
+  // membership = "deferral already planned while continuously visible".
+  const plannedActivationWorktreeIdsRef = useRef(new Set<string>())
   useEffect(() => {
     const timers = measurableBackgroundWorktreeTimersRef.current
     const closeDialogDebounceTimers = closeDialogDebounceTimersRef.current
@@ -970,7 +995,11 @@ function Terminal(): React.JSX.Element | null {
     // the first parking attempt.
     for (const worktreeId of Array.from(nextParkedTerminalWorktreeIds)) {
       const tabs = tabsByWorktree[worktreeId] ?? []
-      if (!tabs.every((tab) => canWatcherCoverParkedTerminalTab(worktreeId, tab))) {
+      if (
+        !tabs.every((tab) =>
+          canWatcherCoverParkedTerminalTab(worktreeId, tab, terminalProviderHasAuthoritativeSnapshot)
+        )
+      ) {
         nextParkedTerminalWorktreeIds.delete(worktreeId)
       }
     }
@@ -1027,126 +1056,137 @@ function Terminal(): React.JSX.Element | null {
     // mount replays scrollback through xterm, attaches a WebGL renderer, and
     // issues a sync-IPC snapshot read, so a whole-worktree stampede freezes
     // the renderer for the entire activation. Hidden tabs defer like
-    // cold-parked tabs from birth and mount on first reveal.
-    const worktreeTabs = tabsByWorktree[renderedActiveWorktreeId] ?? []
+    // cold-parked tabs from birth and mount on first reveal. With side-by-side
+    // panes the same planning runs once per visible pane.
     const coldActivationDeferralEnabled =
       terminalParkingEnabled && terminalTitleSnapshotAuthorityEnabled
-    const immediateTabIds = new Set<string>()
-    if (activeTabId) {
-      immediateTabIds.add(activeTabId)
+    // Why: a pane that leaves the visible set must re-run the deferral
+    // decision on its next reveal, mirroring the old single-active reset.
+    for (const plannedId of Array.from(plannedActivationWorktreeIdsRef.current)) {
+      if (!visiblePaneIdSet.has(plannedId)) {
+        plannedActivationWorktreeIdsRef.current.delete(plannedId)
+      }
     }
-    // Why: on a fresh switch the global activeTabId can still point at the
-    // previous worktree for one pass; the remembered per-worktree tab is the
-    // one about to become visible.
-    const rememberedActiveTabId = activeTabIdByWorktree[renderedActiveWorktreeId]
-    if (rememberedActiveTabId) {
-      immediateTabIds.add(rememberedActiveTabId)
-    }
-    // Why groups: split mode shows one tab per group at once, so every
-    // group's active tab is user-visible and must not defer. group.activeTabId
-    // is a unified-tab id — map it to the terminal tab's entity id, keeping
-    // the raw id too in case older persisted groups stored entity ids.
-    const unifiedTabById = new Map(
-      (useAppStore.getState().unifiedTabsByWorktree[renderedActiveWorktreeId] ?? []).map(
-        (unifiedTab) => [unifiedTab.id, unifiedTab]
+    for (const paneWorktreeId of visiblePaneIdSet) {
+      const worktreeTabs = tabsByWorktree[paneWorktreeId] ?? []
+      const immediateTabIds = new Set<string>()
+      // Why: the global activeTabId belongs to the focused pane only.
+      if (paneWorktreeId === renderedActiveWorktreeId && activeTabId) {
+        immediateTabIds.add(activeTabId)
+      }
+      // Why: on a fresh switch the global activeTabId can still point at the
+      // previous worktree for one pass; the remembered per-worktree tab is the
+      // one about to become visible.
+      const rememberedActiveTabId = activeTabIdByWorktree[paneWorktreeId]
+      if (rememberedActiveTabId) {
+        immediateTabIds.add(rememberedActiveTabId)
+      }
+      // Why groups: split mode shows one tab per group at once, so every
+      // group's active tab is user-visible and must not defer. group.activeTabId
+      // is a unified-tab id — map it to the terminal tab's entity id, keeping
+      // the raw id too in case older persisted groups stored entity ids.
+      const unifiedTabById = new Map(
+        (useAppStore.getState().unifiedTabsByWorktree[paneWorktreeId] ?? []).map((unifiedTab) => [
+          unifiedTab.id,
+          unifiedTab
+        ])
       )
-    )
-    for (const group of groupsByWorktree[renderedActiveWorktreeId] ?? []) {
-      if (!group.activeTabId) {
-        continue
+      for (const group of groupsByWorktree[paneWorktreeId] ?? []) {
+        if (!group.activeTabId) {
+          continue
+        }
+        immediateTabIds.add(group.activeTabId)
+        const activeUnifiedTab = unifiedTabById.get(group.activeTabId)
+        if (activeUnifiedTab?.contentType === 'terminal') {
+          immediateTabIds.add(activeUnifiedTab.entityId)
+        }
       }
-      immediateTabIds.add(group.activeTabId)
-      const activeUnifiedTab = unifiedTabById.get(group.activeTabId)
-      if (activeUnifiedTab?.contentType === 'terminal') {
-        immediateTabIds.add(activeUnifiedTab.entityId)
+      for (const portal of activityTerminalPortals) {
+        if (portal.worktreeId === paneWorktreeId) {
+          immediateTabIds.add(portal.tabId)
+        }
       }
-    }
-    for (const portal of activityTerminalPortals) {
-      if (portal.worktreeId === renderedActiveWorktreeId) {
-        immediateTabIds.add(portal.tabId)
-      }
-    }
-    // Why: a queued startup needs a mounted pane to run its command.
-    // pendingActivationSpawn is deliberately NOT immediate: session hydration
-    // blanket-marks every persisted tab with it, and a deferred tab's reveal
-    // consumes it exactly like an activation mount would — just later.
-    for (const tab of worktreeTabs) {
-      if (pendingStartupByTabId[tab.id] !== undefined) {
-        immediateTabIds.add(tab.id)
-      }
-    }
-    const activationHostSupportsDeferral = canDeferColdActivationTabsForHost({
-      executionHostId: activeWorktreeDeferralHostId
-    })
-    if (lastActivationWorktreeIdRef.current !== renderedActiveWorktreeId) {
-      lastActivationWorktreeIdRef.current = renderedActiveWorktreeId
-      const tabById = new Map(worktreeTabs.map((tab) => [tab.id, tab]))
-      planColdActivationTabDeferral({
-        restrictions: backgroundMountTabIdsByWorktreeRef.current,
-        deferredMountTabIdsByWorktree: activationDeferredMountTabIdsByWorktreeRef.current,
-        worktreeId: renderedActiveWorktreeId,
-        allTabIds: worktreeTabs.map((tab) => tab.id),
-        isTabLive: hasRegisteredRuntimeTerminalTab,
-        // Why the coverage gate: an unmounted tab's bells/titles/completions
-        // are owned by parked byte watchers; a tab they cannot cover must
-        // mount immediately, mirroring the cold-park eligibility rule.
-        isTabDeferrable: (tabId) => {
-          const tab = tabById.get(tabId)
-          return (
-            // Why: byte-mode watchers cannot reconstruct output emitted before
-            // registration. Remote or unresolved ownership also mounts eagerly
-            // because only a confirmed local daemon can provide snapshots.
-            coldActivationDeferralEnabled &&
-            activationHostSupportsDeferral &&
-            tab !== undefined &&
-            canWatcherCoverParkedTerminalTab(
-              renderedActiveWorktreeId,
-              tab,
-              terminalProviderHasAuthoritativeSnapshot
-            )
-          )
-        },
-        immediateTabIds
-      })
-    } else if (!coldActivationDeferralEnabled || !activationHostSupportsDeferral) {
-      // Why: kill-switch or host-ownership changes while active must restore
-      // eager mounting immediately, not strand an old local-only restriction.
-      backgroundMountTabIdsByWorktreeRef.current.delete(renderedActiveWorktreeId)
-      activationDeferredMountTabIdsByWorktreeRef.current.delete(renderedActiveWorktreeId)
-    } else {
-      // Why: tabs added after activation never passed the original coverage
-      // gate. Uncoverable/no-PTY tabs must mount now so they can spawn or keep
-      // their non-snapshot-backed live transport.
+      // Why: a queued startup needs a mounted pane to run its command.
+      // pendingActivationSpawn is deliberately NOT immediate: session hydration
+      // blanket-marks every persisted tab with it, and a deferred tab's reveal
+      // consumes it exactly like an activation mount would — just later.
       for (const tab of worktreeTabs) {
-        if (
-          !canWatcherCoverParkedTerminalTab(
-            renderedActiveWorktreeId,
-            tab,
-            terminalProviderHasAuthoritativeSnapshot
-          )
-        ) {
+        if (pendingStartupByTabId[tab.id] !== undefined) {
           immediateTabIds.add(tab.id)
         }
       }
-      revealActivationDeferredTabs({
-        restrictions: backgroundMountTabIdsByWorktreeRef.current,
-        deferredMountTabIdsByWorktree: activationDeferredMountTabIdsByWorktreeRef.current,
-        worktreeId: renderedActiveWorktreeId,
-        allTabIds: worktreeTabs.map((tab) => tab.id),
-        immediateTabIds
+      const activationHostSupportsDeferral = canDeferColdActivationTabsForHost({
+        // Why getState for side panes: only the focused worktree's host id has
+        // a live subscription; pane membership changes re-render anyway.
+        executionHostId:
+          paneWorktreeId === renderedActiveWorktreeId
+            ? activeWorktreeDeferralHostId
+            : getResolvedExecutionHostIdForWorktree(useAppStore.getState(), paneWorktreeId)
       })
-    }
-    mountedWorktreeIdsRef.current.add(renderedActiveWorktreeId)
-    // Why: side-by-side panes must render even when never activated this
-    // session (e.g. a split restored on startup). Eager mount is acceptable —
-    // opening a pane focuses it, which runs the deferral planning above.
-    for (const paneId of visiblePaneIdSet) {
-      mountedWorktreeIdsRef.current.add(paneId)
+      if (!plannedActivationWorktreeIdsRef.current.has(paneWorktreeId)) {
+        plannedActivationWorktreeIdsRef.current.add(paneWorktreeId)
+        const tabById = new Map(worktreeTabs.map((tab) => [tab.id, tab]))
+        planColdActivationTabDeferral({
+          restrictions: backgroundMountTabIdsByWorktreeRef.current,
+          deferredMountTabIdsByWorktree: activationDeferredMountTabIdsByWorktreeRef.current,
+          worktreeId: paneWorktreeId,
+          allTabIds: worktreeTabs.map((tab) => tab.id),
+          isTabLive: hasRegisteredRuntimeTerminalTab,
+          // Why the coverage gate: an unmounted tab's bells/titles/completions
+          // are owned by parked byte watchers; a tab they cannot cover must
+          // mount immediately, mirroring the cold-park eligibility rule.
+          isTabDeferrable: (tabId) => {
+            const tab = tabById.get(tabId)
+            return (
+              // Why: byte-mode watchers cannot reconstruct output emitted before
+              // registration. Remote or unresolved ownership also mounts eagerly
+              // because only a confirmed local daemon can provide snapshots.
+              coldActivationDeferralEnabled &&
+              activationHostSupportsDeferral &&
+              tab !== undefined &&
+              canWatcherCoverParkedTerminalTab(
+                paneWorktreeId,
+                tab,
+                terminalProviderHasAuthoritativeSnapshot
+              )
+            )
+          },
+          immediateTabIds
+        })
+      } else if (!coldActivationDeferralEnabled || !activationHostSupportsDeferral) {
+        // Why: kill-switch or host-ownership changes while active must restore
+        // eager mounting immediately, not strand an old local-only restriction.
+        backgroundMountTabIdsByWorktreeRef.current.delete(paneWorktreeId)
+        activationDeferredMountTabIdsByWorktreeRef.current.delete(paneWorktreeId)
+      } else {
+        // Why: tabs added after activation never passed the original coverage
+        // gate. Uncoverable/no-PTY tabs must mount now so they can spawn or keep
+        // their non-snapshot-backed live transport.
+        for (const tab of worktreeTabs) {
+          if (
+            !canWatcherCoverParkedTerminalTab(
+              paneWorktreeId,
+              tab,
+              terminalProviderHasAuthoritativeSnapshot
+            )
+          ) {
+            immediateTabIds.add(tab.id)
+          }
+        }
+        revealActivationDeferredTabs({
+          restrictions: backgroundMountTabIdsByWorktreeRef.current,
+          deferredMountTabIdsByWorktree: activationDeferredMountTabIdsByWorktreeRef.current,
+          worktreeId: paneWorktreeId,
+          allTabIds: worktreeTabs.map((tab) => tab.id),
+          immediateTabIds
+        })
+      }
+      mountedWorktreeIdsRef.current.add(paneWorktreeId)
     }
   } else {
     // Why: the next ready activation must re-run the deferral decision even
     // if it re-activates the same worktree the session started on.
-    lastActivationWorktreeIdRef.current = null
+    plannedActivationWorktreeIdsRef.current.clear()
   }
   pruneClosedBackgroundMountTabs(
     backgroundMountTabIdsByWorktreeRef.current,
@@ -1214,7 +1254,11 @@ function Terminal(): React.JSX.Element | null {
           if (
             deferredTabIds?.has(tab.id) &&
             !parkedTabIds.has(tab.id) &&
-            canWatcherCoverParkedTerminalTab(workspace.id, tab) &&
+            canWatcherCoverParkedTerminalTab(
+              workspace.id,
+              tab,
+              terminalProviderHasAuthoritativeSnapshot
+            ) &&
             !findActivityTerminalPortal(activityTerminalPortals, {
               worktreeId: workspace.id,
               tabId: tab.id

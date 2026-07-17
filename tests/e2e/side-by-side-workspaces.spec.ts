@@ -112,6 +112,22 @@ test.describe('side-by-side workspaces', () => {
     expect(await getSplitLeafIds(page)).toEqual([primaryId, sideId])
     await expect(stripFor(sideId).first()).toBeVisible()
 
+    // The split layout persists into the session payload on the production
+    // shutdown flush, so a restart can restore both panes.
+    await page.evaluate(() => window.dispatchEvent(new Event('beforeunload')))
+    await expect
+      .poll(
+        () =>
+          page.evaluate(async () => {
+            const session = await window.api.session.get()
+            const layout = (session as { workspaceSplitLayoutOnShutdown?: { type: string } | null })
+              .workspaceSplitLayoutOnShutdown
+            return layout?.type ?? null
+          }),
+        { timeout: 10_000, message: 'split layout was not persisted on shutdown flush' }
+      )
+      .toBe('split')
+
     // Closing the split from the store collapses back to single view and the
     // remaining pane stays focused.
     await page.evaluate((removeId) => {

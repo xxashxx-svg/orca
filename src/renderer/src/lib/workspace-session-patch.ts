@@ -3,13 +3,13 @@ import { pruneLocalTerminalScrollbackBuffers } from '../../../shared/workspace-s
 import { normalizeBrowserHistoryEntries } from '../../../shared/workspace-session-browser-history'
 import {
   buildActiveConnectionIdsAtShutdown,
-  buildEditorSessionData,
   buildPersistedBrowserPagesByWorkspace,
   buildPersistedBrowserTabsByWorktree,
   buildSanitizedTabsByWorktree,
   buildTerminalSessionData,
   type WorkspaceSessionSnapshot
 } from './workspace-session'
+import { buildEditorSessionData } from './workspace-session-editor-files'
 import { buildPersistedUnifiedTabSessionData } from './workspace-session-unified-tabs'
 import { buildLastVisitedAtByWorktreeId } from './workspace-session-focus-recency'
 import { buildSleepingAgentSessionData } from './workspace-session-sleeping-agents'
@@ -147,6 +147,9 @@ export function buildWorkspaceSessionPatch(
   if (changed.has('sleepingAgentSessionsByPaneKey')) {
     patch.sleepingAgentSessionsByPaneKey =
       buildSleepingAgentSessionData(snapshot).sleepingAgentSessionsByPaneKey
+  }
+  if (changed.has('workspaceSplitLayout')) {
+    patch.workspaceSplitLayoutOnShutdown = snapshot.workspaceSplitLayout ?? undefined
   }
 
   return patch

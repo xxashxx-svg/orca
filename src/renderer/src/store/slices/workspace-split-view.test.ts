@@ -17,6 +17,10 @@ const mockApi = {
   worktrees: { list: vi.fn().mockResolvedValue([]), updateMeta: vi.fn().mockResolvedValue({}) },
   gh: { prForBranch: vi.fn().mockResolvedValue(null), issue: vi.fn().mockResolvedValue(null) },
   settings: { get: vi.fn().mockResolvedValue({}), set: vi.fn().mockResolvedValue(undefined) },
+  pty: {
+    kill: vi.fn().mockResolvedValue(undefined),
+    spawn: vi.fn().mockResolvedValue({ id: 'p' })
+  },
   cache: {
     getGitHub: vi.fn().mockResolvedValue(null),
     setGitHub: vi.fn().mockResolvedValue(undefined)
@@ -164,6 +168,17 @@ describe('workspace-split-view slice', () => {
       store.getState().openWorkspacePane(WT(2))
       store.getState().setActiveWorktree(null)
       expect(store.getState().workspaceSplitLayout).toBeNull()
+    })
+  })
+
+  describe('emptied pane collapse', () => {
+    it('closing the focused pane last tab hands focus to the surviving pane', () => {
+      store.getState().openWorkspacePane(WT(2))
+      store.getState().setActiveWorktree(WT(2))
+      const tab = store.getState().createUnifiedTab(WT(2), 'editor')
+      store.getState().closeUnifiedTab(tab.id)
+      expect(store.getState().workspaceSplitLayout).toBeNull()
+      expect(store.getState().activeWorktreeId).toBe(WT(1))
     })
   })
 

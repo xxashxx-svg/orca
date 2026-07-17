@@ -29,6 +29,7 @@ import {
   updateGroup
 } from './tab-group-state'
 import { isPaneColumnSplitDropNoOp } from './pane-column-split-drop-no-op'
+import { collectPaneIds, workspaceSplitContainsPane } from './workspace-split-view'
 import { buildHydratedTabState, pruneTabGroupLayoutForGroups } from './tabs-hydration'
 import { buildOrphanTerminalCleanupPatch, getOrphanTerminalIds } from './terminal-orphan-helpers'
 import { createBrowserUuid } from '@/lib/browser-uuid'
@@ -1037,6 +1038,22 @@ export const createTabsSlice: StateCreator<AppState, [], [], TabsSlice> = (set, 
           : {})
       }
     })
+
+    // Why: an emptied side-by-side pane closes and hands focus to a surviving
+    // pane instead of dropping the whole workspace to the landing screen.
+    const afterClose = get()
+    if (
+      afterClose.activeWorktreeId === null &&
+      workspaceSplitContainsPane(afterClose.workspaceSplitLayout, worktreeId)
+    ) {
+      const survivor = collectPaneIds(afterClose.workspaceSplitLayout!).find(
+        (paneId) => paneId !== worktreeId
+      )
+      afterClose.removeWorktreesFromSplitView([worktreeId])
+      if (survivor) {
+        get().setActiveWorktree(survivor)
+      }
+    }
 
     if (opts?.recordInteraction !== false) {
       get().recordFeatureInteraction?.('terminal-tabs')
