@@ -137,6 +137,40 @@ test.describe('side-by-side workspaces', () => {
     expect(await getActiveWorktreeId(page)).toBe(primaryId)
   })
 
+  test('dragging a project card into the workspace body opens a split', async ({
+    orcaPage: page
+  }) => {
+    test.setTimeout(180_000)
+    await waitForSessionReady(page)
+    const primaryId = await waitForActiveWorktree(page)
+    await enableSideBySideWorkspaces(page)
+    const sideId = await createSecondWorktree(page, `e2e-drag-pane-${Date.now()}`)
+
+    const row = worktreeRow(page, sideId)
+    const rowBox = await row.boundingBox()
+    const bodyBox = await page.locator('[data-workspace-split-drop-root]').boundingBox()
+    if (!rowBox || !bodyBox) {
+      throw new Error('missing drag geometry')
+    }
+    // Drag the card from the sidebar onto the right quarter of the workspace
+    // body (edge zone → split right). Multiple small moves keep the custom
+    // pointer-drag's activation threshold and frame hit-testing realistic.
+    await page.mouse.move(rowBox.x + rowBox.width / 2, rowBox.y + rowBox.height / 2)
+    await page.mouse.down()
+    const targetX = bodyBox.x + bodyBox.width * 0.9
+    const targetY = bodyBox.y + bodyBox.height * 0.5
+    for (let step = 1; step <= 8; step++) {
+      await page.mouse.move(
+        rowBox.x + ((targetX - rowBox.x) * step) / 8,
+        rowBox.y + ((targetY - rowBox.y) * step) / 8
+      )
+    }
+    await page.mouse.up()
+
+    await expect.poll(() => getSplitLeafIds(page), { timeout: 30_000 }).toEqual([primaryId, sideId])
+    await expect.poll(() => getActiveWorktreeId(page)).toBe(sideId)
+  })
+
   test('flag off keeps the context menu free of Open to the Side', async ({ orcaPage: page }) => {
     await waitForSessionReady(page)
     const primaryId = await waitForActiveWorktree(page)

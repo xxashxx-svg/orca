@@ -57,6 +57,7 @@ import {
 import TabGroupSplitLayout from './tab-group/TabGroupSplitLayout'
 import AiVaultSessionDropLayer from './tab-group/AiVaultSessionDropLayer'
 import WorkspaceSplitDividers from './workspace-split/WorkspaceSplitDividers'
+import WorkspaceSplitDropOverlay from './workspace-split/WorkspaceSplitDropOverlay'
 import {
   computeWorkspaceSplitGeometry,
   type WorkspacePaneFrame
@@ -283,6 +284,9 @@ function Terminal(): React.JSX.Element | null {
     return new Set(renderedActiveWorktreeId ? [renderedActiveWorktreeId] : [])
   }, [workspaceSplitGeometry, renderedActiveWorktreeId])
   const workspaceSplitContainerRef = useRef<HTMLDivElement | null>(null)
+  const sideBySideWorkspacesEnabled = useAppStore(
+    (s) => s.settings?.experimentalSideBySideWorkspaces === true
+  )
   const activeWorktreeDeferralHostId = useAppStore((s) =>
     getResolvedExecutionHostIdForWorktree(s, renderedActiveWorktreeId)
   )
@@ -2326,6 +2330,7 @@ function Terminal(): React.JSX.Element | null {
       {anyMountedWorktreeHasLayout ? (
         <div
           ref={workspaceSplitContainerRef}
+          data-workspace-split-drop-root=""
           className={`relative flex flex-1 min-w-0 min-h-0 overflow-hidden${effectiveActiveLayout ? '' : ' hidden'}`}
         >
           {/* Why: each mounted worktree surface is absolutely positioned so we
@@ -2379,6 +2384,7 @@ function Terminal(): React.JSX.Element | null {
               containerRef={workspaceSplitContainerRef}
             />
           ) : null}
+          {sideBySideWorkspacesEnabled ? <WorkspaceSplitDropOverlay /> : null}
         </div>
       ) : null}
 
@@ -2715,6 +2721,9 @@ const WorktreeSplitSurface = React.memo(function WorktreeSplitSurface({
 
   return (
     <div
+      // Why: sidebar project drags hit-test visible panes by this attribute;
+      // hidden surfaces must not participate.
+      data-workspace-pane-id={isVisible ? worktreeId : undefined}
       className={
         isVisible
           ? splitFrame

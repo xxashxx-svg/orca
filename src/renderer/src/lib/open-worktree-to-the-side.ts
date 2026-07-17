@@ -20,7 +20,12 @@ export function openWorktreeToTheSide(
     workspaceSplitContainsPane(state.workspaceSplitLayout, worktreeId) ||
     (!state.workspaceSplitLayout && state.activeWorktreeId === worktreeId)
   if (!alreadyVisible && !state.openWorkspacePane(worktreeId, opts)) {
-    return false
+    // Why: a center-drop on the single full-width view has no pane to swap —
+    // it degrades to a plain activation. Any other rejection aborts.
+    const replaceWithoutSplit = (opts?.edge ?? 'right') === 'replace' && !state.workspaceSplitLayout
+    if (!replaceWithoutSplit) {
+      return false
+    }
   }
   // Why: reuse the canonical activation for focus, visit recency, agent-session
   // resume, and the initial terminal — a side pane needs all of them too.
