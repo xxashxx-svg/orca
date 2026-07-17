@@ -5453,6 +5453,12 @@
             "defaultViewLabel": "Vista predeterminada de chat nativo",
             "defaultViewTerminal": "Chat en terminal",
             "defaultViewNative": "Chat nativo"
+          },
+          "sideBySideWorkspaces": {
+            "title": "Side-by-side workspaces",
+            "description": "Show terminals from several projects at once by splitting the main area into per-project panes.",
+            "copy": "Open a project to the side from the sidebar to tile its terminals next to the current one. Drag between panes to resize.",
+            "toggleLabel": "Toggle side-by-side workspaces"
           }
         },
         "FloatingWorkspacePane": {
@@ -7622,6 +7628,10 @@
               "title": "Chat nativo",
               "description": "Previsualiza la interfaz de chat de escritorio para sesiones de terminal de agentes compatibles.",
               "grok": "grok"
+            },
+            "sideBySideWorkspaces": {
+              "title": "Side-by-side workspaces",
+              "description": "Show terminals from several projects at once by splitting the main area into per-project panes."
             }
           }
         },

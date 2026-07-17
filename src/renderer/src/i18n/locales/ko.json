@@ -5438,6 +5438,12 @@
             "defaultViewLabel": "기본 기본 채팅 보기",
             "defaultViewTerminal": "Terminal 채팅",
             "defaultViewNative": "네이티브 채팅"
+          },
+          "sideBySideWorkspaces": {
+            "title": "Side-by-side workspaces",
+            "description": "Show terminals from several projects at once by splitting the main area into per-project panes.",
+            "copy": "Open a project to the side from the sidebar to tile its terminals next to the current one. Drag between panes to resize.",
+            "toggleLabel": "Toggle side-by-side workspaces"
           }
         },
         "FloatingWorkspacePane": {
@@ -7607,6 +7613,10 @@
               "title": "네이티브 채팅",
               "description": "지원되는 에이전트 터미널 세션의 데스크톱 채팅 화면을 미리 봅니다.",
               "grok": "grok"
+            },
+            "sideBySideWorkspaces": {
+              "title": "Side-by-side workspaces",
+              "description": "Show terminals from several projects at once by splitting the main area into per-project panes."
             }
           }
         },

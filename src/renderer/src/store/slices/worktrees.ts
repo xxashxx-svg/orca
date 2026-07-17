@@ -31,6 +31,12 @@ import {
   type ClosedTerminalTabSnapshot
 } from './recently-closed-tabs'
 import { findRepoForHost } from './repo-host-identity'
+import {
+  collectPaneIds,
+  pruneWorkspaceSplitLayout,
+  replaceWorkspacePaneLeaf,
+  workspaceSplitContainsPane
+} from './workspace-split-view'
 import { ensureHooksConfirmed } from '@/lib/ensure-hooks-confirmed'
 import { cleanupEphemeralVmRuntimesForDeleted } from '@/lib/ephemeral-vm-runtime-cleanup'
 import { tabHasLivePty } from '@/lib/tab-has-live-pty'
@@ -2272,6 +2278,9 @@ function buildWorktreePurgeState(s: AppState, worktreeIds: string[]): Partial<Ap
       s.defaultTerminalTabsAppliedByWorktreeId
     ),
     activeWorktreeId: removedActive ? null : s.activeWorktreeId,
+    // Why: side-by-side panes must never point at removed worktrees; this runs
+    // regardless of the experimental flag so stale state can't strand.
+    workspaceSplitLayout: pruneWorkspaceSplitLayout(s.workspaceSplitLayout, worktreeIdSet),
     activeWorkspaceKey: (() => {
       if (s.activeWorkspaceKey && worktreeIdSet.has(s.activeWorkspaceKey)) {
         return null
@@ -4535,8 +4544,21 @@ export const createWorktreeSlice: StateCreator<AppState, [], [], WorktreeSlice> 
           activeWorkspaceKey: null,
           // Why: activating any real worktree (or clearing it) must dismiss the
           // background-creation panel so the user isn't stranded on it.
-          activePendingCreationId: null
+          activePendingCreationId: null,
+          // No focused worktree means no side-by-side panes to anchor to.
+          workspaceSplitLayout: null
         }
+      }
+
+      // Why: with side-by-side panes open, activating an off-screen worktree
+      // replaces the focused pane's project instead of tearing the split down.
+      let nextSplitLayout = s.workspaceSplitLayout
+      if (nextSplitLayout && !workspaceSplitContainsPane(nextSplitLayout, worktreeId)) {
+        const replacedPaneId =
+          s.activeWorktreeId && workspaceSplitContainsPane(nextSplitLayout, s.activeWorktreeId)
+            ? s.activeWorktreeId
+            : collectPaneIds(nextSplitLayout)[0]
+        nextSplitLayout = replaceWorkspacePaneLeaf(nextSplitLayout, replacedPaneId, worktreeId)
       }
 
       const worktree = findKnownWorktreeById(s, worktreeId)
@@ -4744,7 +4766,8 @@ export const createWorktreeSlice: StateCreator<AppState, [], [], WorktreeSlice> 
         nextActiveTabTypeByWorktree !== s.activeTabTypeByWorktree ||
         nextEverActivated !== s.everActivatedWorktreeIds ||
         nextWorktrees !== s.worktreesByRepo ||
-        nextDetectedWorktrees !== s.detectedWorktreesByRepo
+        nextDetectedWorktrees !== s.detectedWorktreesByRepo ||
+        nextSplitLayout !== s.workspaceSplitLayout
       if (!hasStateChange) {
         // Why: repeated activation of the already-active worktree can come from
         // clicks, IPC, and automation restore paths. Preserve the root Zustand
@@ -4766,6 +4789,9 @@ export const createWorktreeSlice: StateCreator<AppState, [], [], WorktreeSlice> 
         ...(nextWorktrees !== s.worktreesByRepo ? { worktreesByRepo: nextWorktrees } : {}),
         ...(nextDetectedWorktrees !== s.detectedWorktreesByRepo
           ? { detectedWorktreesByRepo: nextDetectedWorktrees }
+          : {}),
+        ...(nextSplitLayout !== s.workspaceSplitLayout
+          ? { workspaceSplitLayout: nextSplitLayout }
           : {}),
         ...tabsByWorktreeUpdate
       }

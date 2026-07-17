@@ -5438,6 +5438,12 @@
             "defaultViewLabel": "默认原生聊天视图",
             "defaultViewTerminal": "终端聊天",
             "defaultViewNative": "原生聊天"
+          },
+          "sideBySideWorkspaces": {
+            "title": "Side-by-side workspaces",
+            "description": "Show terminals from several projects at once by splitting the main area into per-project panes.",
+            "copy": "Open a project to the side from the sidebar to tile its terminals next to the current one. Drag between panes to resize.",
+            "toggleLabel": "Toggle side-by-side workspaces"
           }
         },
         "FloatingWorkspacePane": {
@@ -7607,6 +7613,10 @@
               "title": "原生聊天",
               "description": "预览受支持的智能体终端会话的桌面聊天界面。",
               "grok": "grok"
+            },
+            "sideBySideWorkspaces": {
+              "title": "Side-by-side workspaces",
+              "description": "Show terminals from several projects at once by splitting the main area into per-project panes."
             }
           }
         },
