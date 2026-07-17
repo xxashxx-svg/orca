@@ -19,6 +19,7 @@ import {
   Bell,
   BellOff,
   CircleX,
+  Columns2,
   Moon,
   Pencil,
   Pin,
@@ -39,6 +40,7 @@ import type { Repo, Worktree } from '../../../../shared/types'
 import { runWorktreeBatchDelete, runWorktreeDelete } from './delete-worktree-flow'
 import { runSleepWorktrees } from './sleep-worktree-flow'
 import { activateAndRevealWorktree } from '@/lib/worktree-activation'
+import { openWorktreeToTheSide } from '@/lib/open-worktree-to-the-side'
 import { tabHasLivePty } from '@/lib/tab-has-live-pty'
 import { VIRTUALIZED_SCROLL_ANCHOR_RECORD_EVENT } from '@/hooks/useVirtualizedScrollAnchor'
 import { getLineageRenderInfo } from './worktree-list-groups'
@@ -338,6 +340,9 @@ const WorktreeContextMenu = React.memo(function WorktreeContextMenu({
   const workspaceScope = parseWorkspaceKey(worktree.id)
   const folderWorkspaceId =
     workspaceScope?.type === 'folder' ? workspaceScope.folderWorkspaceId : null
+  const sideBySideWorkspacesEnabled = useAppStore(
+    (s) => s.settings?.experimentalSideBySideWorkspaces === true
+  )
   const sleepableWorktrees = useMemo(
     () =>
       activeContextWorktrees.filter((item) =>
@@ -734,6 +739,18 @@ const WorktreeContextMenu = React.memo(function WorktreeContextMenu({
           <DropdownMenuSeparator />
           {!isMultiContext && (
             <>
+              {sideBySideWorkspacesEnabled && !folderWorkspaceId ? (
+                <DropdownMenuItem
+                  onSelect={() => openWorktreeToTheSide(worktree.id)}
+                  disabled={isDeleting}
+                >
+                  <Columns2 className="size-3.5" />
+                  {translate(
+                    'auto.components.sidebar.WorktreeContextMenu.openToTheSide',
+                    'Open to the Side'
+                  )}
+                </DropdownMenuItem>
+              ) : null}
               <WorktreeOpenInSubMenu
                 worktreePath={worktree.path}
                 connectionId={repo?.connectionId ?? null}

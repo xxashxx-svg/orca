@@ -56,6 +56,12 @@ import {
 } from '../hooks/ipc-tab-switch'
 import TabGroupSplitLayout from './tab-group/TabGroupSplitLayout'
 import AiVaultSessionDropLayer from './tab-group/AiVaultSessionDropLayer'
+import WorkspaceSplitDividers from './workspace-split/WorkspaceSplitDividers'
+import {
+  computeWorkspaceSplitGeometry,
+  type WorkspacePaneFrame
+} from './workspace-split/workspace-split-frames'
+import { collectPaneIds } from '../store/slices/workspace-split-view'
 import { shouldAutoCreateInitialTerminal } from './terminal/initial-terminal'
 import { resolveRepairedActiveTerminalTabId } from './terminal/active-terminal-repair'
 import { scheduleBackgroundTerminalWorktreeMeasure } from './terminal/background-terminal-worktree-visibility'
@@ -263,6 +269,20 @@ function Terminal(): React.JSX.Element | null {
   )
   const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
   const renderedActiveWorktreeId = activeWorktreeId
+  const workspaceSplitLayout = useAppStore((s) => s.workspaceSplitLayout)
+  const workspaceSplitGeometry = useMemo(
+    () => (workspaceSplitLayout ? computeWorkspaceSplitGeometry(workspaceSplitLayout) : null),
+    [workspaceSplitLayout]
+  )
+  // Why: visibility is derived — the split tree's leaves when side-by-side
+  // panes are open, else just the focused worktree (classic single view).
+  const visiblePaneIdSet = useMemo(() => {
+    if (workspaceSplitGeometry) {
+      return new Set(workspaceSplitGeometry.frameByWorktreeId.keys())
+    }
+    return new Set(renderedActiveWorktreeId ? [renderedActiveWorktreeId] : [])
+  }, [workspaceSplitGeometry, renderedActiveWorktreeId])
+  const workspaceSplitContainerRef = useRef<HTMLDivElement | null>(null)
   const activeWorktreeDeferralHostId = useAppStore((s) =>
     getResolvedExecutionHostIdForWorktree(s, renderedActiveWorktreeId)
   )
@@ -371,6 +391,17 @@ function Terminal(): React.JSX.Element | null {
     // fresh tabs to a concrete owner even before any explicit split exists.
     ensureWorktreeRootGroup(activeWorktreeId)
   }, [activeWorktreeId, ensureWorktreeRootGroup])
+
+  useEffect(() => {
+    if (!workspaceSplitLayout) {
+      return
+    }
+    // Why: every visible side pane needs a root group so the split-group path
+    // renders its inline tab strip instead of the legacy titlebar fallback.
+    for (const paneId of collectPaneIds(workspaceSplitLayout)) {
+      ensureWorktreeRootGroup(paneId)
+    }
+  }, [workspaceSplitLayout, ensureWorktreeRootGroup])
 
   // Filter editor files to only show those belonging to the active worktree
   const worktreeFiles = renderedActiveWorktreeId
@@ -906,7 +937,7 @@ function Terminal(): React.JSX.Element | null {
         terminalWorktreeHiddenSinceRef.current.delete(worktreeId)
         continue
       }
-      const isVisible = activeView === 'terminal' && renderedActiveWorktreeId === worktreeId
+      const isVisible = activeView === 'terminal' && visiblePaneIdSet.has(worktreeId)
       const shouldMeasureHiddenWorktree =
         !isVisible && measurableBackgroundWorktreeIdsRef.current.has(worktreeId)
       const hasActivityTerminalPortal = portalWorktreeIds.has(worktreeId)
@@ -982,6 +1013,7 @@ function Terminal(): React.JSX.Element | null {
     tabsByWorktree,
     terminalParkingEnabled,
     terminalParkingRevision,
+    visiblePaneIdSet,
     workspaceSurfaces
   ])
   // Why: gated on workspaceSessionReady to prevent TerminalPane from mounting
@@ -1105,6 +1137,12 @@ function Terminal(): React.JSX.Element | null {
       })
     }
     mountedWorktreeIdsRef.current.add(renderedActiveWorktreeId)
+    // Why: side-by-side panes must render even when never activated this
+    // session (e.g. a split restored on startup). Eager mount is acceptable —
+    // opening a pane focuses it, which runs the deferral planning above.
+    for (const paneId of visiblePaneIdSet) {
+      mountedWorktreeIdsRef.current.add(paneId)
+    }
   } else {
     // Why: the next ready activation must re-run the deferral decision even
     // if it re-activates the same worktree the session started on.
@@ -1151,7 +1189,7 @@ function Terminal(): React.JSX.Element | null {
       const parkedTabIds = new Set<string>()
       let deferredTabIds: ReadonlySet<string> | null = null
       if (!anyMountedWorktreeHasLayout && mountedWorktreeIdsRef.current.has(workspace.id)) {
-        const isVisible = activeView === 'terminal' && workspace.id === renderedActiveWorktreeId
+        const isVisible = activeView === 'terminal' && visiblePaneIdSet.has(workspace.id)
         const shouldMeasureHiddenWorktree =
           !isVisible && measurableBackgroundWorktreeIdsRef.current.has(workspace.id)
         const parked =
@@ -1213,6 +1251,7 @@ function Terminal(): React.JSX.Element | null {
     tabsByWorktree,
     terminalParkingEnabled,
     terminalTitleSnapshotAuthorityEnabled,
+    visiblePaneIdSet,
     workspaceSessionReady,
     workspaceSurfaces
   ])
@@ -2242,6 +2281,7 @@ function Terminal(): React.JSX.Element | null {
 
       {anyMountedWorktreeHasLayout ? (
         <div
+          ref={workspaceSplitContainerRef}
           className={`relative flex flex-1 min-w-0 min-h-0 overflow-hidden${effectiveActiveLayout ? '' : ' hidden'}`}
         >
           {/* Why: each mounted worktree surface is absolutely positioned so we
@@ -2257,8 +2297,7 @@ function Terminal(): React.JSX.Element | null {
               }
               // Why: use strict equality with 'terminal' instead of !== 'settings'
               // so the terminal/browser surface hides on the tasks page too.
-              const isVisible =
-                activeView === 'terminal' && workspace.id === renderedActiveWorktreeId
+              const isVisible = activeView === 'terminal' && visiblePaneIdSet.has(workspace.id)
               const shouldMeasureHiddenWorktree =
                 !isVisible && measurableBackgroundWorktreeIdsRef.current.has(workspace.id)
               const shouldColdParkTerminalPanes =
@@ -2273,6 +2312,11 @@ function Terminal(): React.JSX.Element | null {
                   layout={layout}
                   focusedGroupId={activeGroupIdByWorktree[workspace.id]}
                   isVisible={isVisible}
+                  splitFrame={
+                    isVisible
+                      ? (workspaceSplitGeometry?.frameByWorktreeId.get(workspace.id) ?? null)
+                      : null
+                  }
                   shouldMeasureHiddenWorktree={shouldMeasureHiddenWorktree}
                   shouldColdParkTerminalPanes={shouldColdParkTerminalPanes}
                   activityTerminalPortals={activityTerminalPortals}
@@ -2285,6 +2329,12 @@ function Terminal(): React.JSX.Element | null {
                 />
               )
             })}
+          {workspaceSplitGeometry && activeView === 'terminal' ? (
+            <WorkspaceSplitDividers
+              dividers={workspaceSplitGeometry.dividers}
+              containerRef={workspaceSplitContainerRef}
+            />
+          ) : null}
         </div>
       ) : null}
 
@@ -2328,8 +2378,7 @@ function Terminal(): React.JSX.Element | null {
               .map((workspace) => {
                 // Why: use strict equality with 'terminal' instead of !== 'settings'
                 // so the terminal/browser surface hides on the tasks page too.
-                const isVisible =
-                  activeView === 'terminal' && workspace.id === renderedActiveWorktreeId
+                const isVisible = activeView === 'terminal' && visiblePaneIdSet.has(workspace.id)
                 const shouldMeasureHiddenWorktree =
                   !isVisible && measurableBackgroundWorktreeIdsRef.current.has(workspace.id)
                 const shouldColdParkTerminalPanes =
@@ -2422,7 +2471,7 @@ function Terminal(): React.JSX.Element | null {
               // Why: use strict equality with 'terminal' instead of !== 'settings'
               // so browser panes also hide on the tasks page.
               const isVisibleWorktree =
-                activeView === 'terminal' && workspace.id === renderedActiveWorktreeId
+                activeView === 'terminal' && visiblePaneIdSet.has(workspace.id)
               if (browserTabs.length === 0) {
                 return null
               }
@@ -2576,6 +2625,7 @@ const WorktreeSplitSurface = React.memo(function WorktreeSplitSurface({
   layout,
   focusedGroupId,
   isVisible,
+  splitFrame,
   shouldMeasureHiddenWorktree,
   shouldColdParkTerminalPanes,
   activityTerminalPortals,
@@ -2587,6 +2637,7 @@ const WorktreeSplitSurface = React.memo(function WorktreeSplitSurface({
   layout: TabGroupLayoutNode
   focusedGroupId?: string
   isVisible: boolean
+  splitFrame?: WorkspacePaneFrame | null
   shouldMeasureHiddenWorktree: boolean
   shouldColdParkTerminalPanes: boolean
   activityTerminalPortals: ActivityTerminalPortalTarget[]
@@ -2605,15 +2656,42 @@ const WorktreeSplitSurface = React.memo(function WorktreeSplitSurface({
   const shouldKeepPaintable =
     shouldMeasureHiddenWorktree || hasAutomationVisibleBrowser || hasMobileDrivenBrowser
 
+  // Why: with side-by-side panes, focus lives on the pane the user last
+  // touched. Capture-phase so promotion lands before TabGroupPanel.focusGroup,
+  // keeping every existing activeWorktreeId guard correct.
+  const promoteSplitPaneFocus = (): void => {
+    if (!isVisible || !splitFrame) {
+      return
+    }
+    const state = useAppStore.getState()
+    if (state.activeWorktreeId !== worktreeId) {
+      state.setActiveWorktree(worktreeId)
+    }
+  }
+
   return (
     <div
       className={
         isVisible
-          ? 'absolute inset-0 flex'
+          ? splitFrame
+            ? 'absolute flex'
+            : 'absolute inset-0 flex'
           : shouldKeepPaintable
             ? 'absolute inset-0 flex opacity-0 pointer-events-none'
             : 'absolute inset-0 hidden'
       }
+      style={
+        isVisible && splitFrame
+          ? {
+              left: `${splitFrame.left}%`,
+              top: `${splitFrame.top}%`,
+              width: `${splitFrame.width}%`,
+              height: `${splitFrame.height}%`
+            }
+          : undefined
+      }
+      onPointerDownCapture={promoteSplitPaneFocus}
+      onFocusCapture={promoteSplitPaneFocus}
       // Why: automation and mobile control need paintable webviews, but hidden
       // worktree controls cannot remain reachable by Tab or assistive tech.
       inert={!isVisible}
