@@ -9,6 +9,7 @@ import {
   collectPaneIds,
   pruneWorkspaceSplitState,
   removeWorkspacePaneLeaves,
+  removeWorktreesFromOtherWorkspaceSplits,
   replaceWorkspacePaneLeaf,
   splitWorkspacePaneLeaf,
   updateWorkspaceSplitRatioAtPath,
@@ -120,14 +121,19 @@ export const createWorkspaceSplitViewSlice: StateCreator<
       return false
     }
     const commitActiveLayout = (next: WorkspacePaneNode): void => {
+      // Why: a project lives in at most one split — pairing it here steals it
+      // from any older pairing, which dissolves once it drops below 2 panes.
+      const exclusive = removeWorktreesFromOtherWorkspaceSplits(
+        s.workspaceSplitLayoutsByAnchor,
+        s.workspaceSplitAnchorMru,
+        anchorId,
+        collectPaneIds(next)
+      )
       set({
         workspaceSplitLayout: next,
         activeWorkspaceSplitAnchorId: anchorId,
-        workspaceSplitLayoutsByAnchor: {
-          ...s.workspaceSplitLayoutsByAnchor,
-          [anchorId]: next
-        },
-        workspaceSplitAnchorMru: bumpWorkspaceSplitAnchorMru(s.workspaceSplitAnchorMru, anchorId),
+        workspaceSplitLayoutsByAnchor: { ...exclusive.byAnchor, [anchorId]: next },
+        workspaceSplitAnchorMru: bumpWorkspaceSplitAnchorMru(exclusive.mru, anchorId),
         // Why: adding/swapping a pane must show the grid so the change is seen.
         workspaceSplitMaximizedPaneId: null
       })

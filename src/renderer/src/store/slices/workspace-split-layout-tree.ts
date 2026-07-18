@@ -181,6 +181,61 @@ export function bumpWorkspaceSplitAnchorMru(mru: readonly string[], anchorId: st
   return [anchorId, ...mru.filter((id) => id !== anchorId)]
 }
 
+/** A project lives in at most one saved split. Removes the given worktrees
+ *  from every split except keepAnchorId — dragging a project into a new
+ *  pairing steals it from its old one, which dissolves below 2 leaves. */
+export function removeWorktreesFromOtherWorkspaceSplits(
+  byAnchor: Record<string, WorkspacePaneNode>,
+  mru: readonly string[],
+  keepAnchorId: string,
+  worktreeIds: readonly string[]
+): { byAnchor: Record<string, WorkspacePaneNode>; mru: string[] } {
+  const removed = new Set(worktreeIds)
+  const nextByAnchor: Record<string, WorkspacePaneNode> = {}
+  for (const [anchorId, layout] of Object.entries(byAnchor)) {
+    if (anchorId === keepAnchorId) {
+      nextByAnchor[anchorId] = layout
+      continue
+    }
+    const pruned = pruneWorkspaceSplitLayout(layout, removed)
+    if (pruned) {
+      nextByAnchor[anchorId] = pruned
+    }
+  }
+  return { byAnchor: nextByAnchor, mru: mru.filter((anchorId) => nextByAnchor[anchorId]) }
+}
+
+/** Hydration sweep for sessions written before exclusive membership: keeps
+ *  each worktree's most recently shown split and prunes it from the rest. */
+export function enforceExclusiveWorkspaceSplitMembership(
+  byAnchor: Record<string, WorkspacePaneNode>,
+  mru: readonly string[]
+): { byAnchor: Record<string, WorkspacePaneNode>; mru: string[] } {
+  const seen = new Set<string>()
+  const orderedAnchors: string[] = []
+  for (const anchorId of [...mru, ...Object.keys(byAnchor)]) {
+    if (!seen.has(anchorId) && byAnchor[anchorId]) {
+      seen.add(anchorId)
+      orderedAnchors.push(anchorId)
+    }
+  }
+  const claimed = new Set<string>()
+  const nextByAnchor: Record<string, WorkspacePaneNode> = {}
+  for (const anchorId of orderedAnchors) {
+    const layout = byAnchor[anchorId]
+    const stolen = new Set(collectPaneIds(layout).filter((paneId) => claimed.has(paneId)))
+    const pruned = pruneWorkspaceSplitLayout(layout, stolen)
+    if (!pruned) {
+      continue
+    }
+    for (const paneId of collectPaneIds(pruned)) {
+      claimed.add(paneId)
+    }
+    nextByAnchor[anchorId] = pruned
+  }
+  return { byAnchor: nextByAnchor, mru: mru.filter((anchorId) => nextByAnchor[anchorId]) }
+}
+
 /** Prune removed worktrees from the active split AND every saved split.
  *  Always returns ONLY the four split fields (never the input state object)
  *  so callers can spread it into a wider store patch safely; per-field

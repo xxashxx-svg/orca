@@ -3,6 +3,7 @@ import type { WorkspacePaneNode } from '../../../../shared/types'
 import {
   MAX_WORKSPACE_SPLIT_PANES,
   collectPaneIds,
+  enforceExclusiveWorkspaceSplitMembership,
   pruneWorkspaceSplitLayout,
   replaceWorkspacePaneLeaf,
   selectVisibleWorkspacePaneIds,
@@ -164,14 +165,28 @@ describe('workspace-split-view slice', () => {
       expect(store.getState().activeWorktreeId).toBe(WT(2))
     })
 
-    it('picks the most recently shown split when a worktree belongs to two', () => {
-      // WT(2) joins a split anchored at WT(1), then one anchored at WT(3).
+    it('pairing a member elsewhere steals it — the old split dissolves', () => {
+      // WT(2) pairs with WT(1); dragging it next to WT(3) must remove it from
+      // the WT(1) pairing, leaving WT(1) alone.
       store.getState().openWorkspacePane(WT(2))
       store.getState().setActiveWorktree(WT(3))
       store.getState().openWorkspacePane(WT(2))
-      store.getState().setActiveWorktree(WT(4))
+      expect(Object.keys(store.getState().workspaceSplitLayoutsByAnchor)).toEqual([WT(3)])
+      store.getState().setActiveWorktree(WT(1))
+      expect(store.getState().workspaceSplitLayout).toBeNull()
       store.getState().setActiveWorktree(WT(2))
-      expect(store.getState().activeWorkspaceSplitAnchorId).toBe(WT(3))
+      expect(collectPaneIds(store.getState().workspaceSplitLayout!)).toEqual([WT(3), WT(2)])
+    })
+
+    it('stealing from a 3-pane split keeps the survivors paired', () => {
+      store.getState().openWorkspacePane(WT(2))
+      store.getState().openWorkspacePane(WT(4))
+      store.getState().setActiveWorktree(WT(3))
+      store.getState().openWorkspacePane(WT(2))
+      expect(collectPaneIds(store.getState().workspaceSplitLayoutsByAnchor[WT(1)])).toEqual([
+        WT(1),
+        WT(4)
+      ])
       expect(collectPaneIds(store.getState().workspaceSplitLayout!)).toEqual([WT(3), WT(2)])
     })
 
@@ -312,6 +327,27 @@ describe('workspace-split-view pure functions', () => {
     expect(pruneWorkspaceSplitLayout(tree, new Set(['zzz']))).toBe(tree)
     expect(collectPaneIds(pruneWorkspaceSplitLayout(tree, new Set(['b']))!)).toEqual(['a', 'c'])
     expect(pruneWorkspaceSplitLayout(tree, new Set(['a', 'b', 'c']))).toBeNull()
+  })
+
+  it('enforceExclusiveWorkspaceSplitMembership keeps the MRU pairing only', () => {
+    const byAnchor: Record<string, WorkspacePaneNode> = {
+      old: {
+        type: 'split',
+        direction: 'horizontal',
+        first: { type: 'pane', worktreeId: 'climb' },
+        second: { type: 'pane', worktreeId: 'shared' }
+      },
+      recent: {
+        type: 'split',
+        direction: 'horizontal',
+        first: { type: 'pane', worktreeId: 'lrq' },
+        second: { type: 'pane', worktreeId: 'shared' }
+      }
+    }
+    const result = enforceExclusiveWorkspaceSplitMembership(byAnchor, ['recent', 'old'])
+    expect(Object.keys(result.byAnchor)).toEqual(['recent'])
+    expect(result.mru).toEqual(['recent'])
+    expect(collectPaneIds(result.byAnchor.recent)).toEqual(['lrq', 'shared'])
   })
 
   it('selectVisibleWorkspacePaneIds falls back to the active worktree', () => {

@@ -37,6 +37,7 @@ import {
 import { isValidHostTerminalTabId, isValidTerminalTabId } from '../../../../shared/terminal-tab-id'
 import {
   collectPaneIds,
+  enforceExclusiveWorkspaceSplitMembership,
   pruneWorkspaceSplitLayout,
   workspaceSplitContainsPane
 } from './workspace-split-view'
@@ -3437,12 +3438,18 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
             byAnchor[anchorId] = pruned
           }
         }
-        const mru = (session.workspaceSplitAnchorMruOnShutdown ?? Object.keys(byAnchor)).filter(
+        const rawMru = (session.workspaceSplitAnchorMruOnShutdown ?? Object.keys(byAnchor)).filter(
           (anchorId) => byAnchor[anchorId]
+        )
+        // Why: sessions written before exclusive membership can hold the same
+        // project in several splits; keep its most recent pairing only.
+        const { byAnchor: exclusiveByAnchor, mru } = enforceExclusiveWorkspaceSplitMembership(
+          byAnchor,
+          rawMru
         )
         const persistedActiveAnchor = session.activeWorkspaceSplitAnchorOnShutdown ?? mru[0] ?? null
         const activeLayout = persistedActiveAnchor
-          ? (byAnchor[persistedActiveAnchor] ?? null)
+          ? (exclusiveByAnchor[persistedActiveAnchor] ?? null)
           : null
         const activeUsable = Boolean(
           activeLayout &&
@@ -3460,7 +3467,7 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
         )
         return {
           workspaceSplitLayout: activeUsable ? activeLayout : null,
-          workspaceSplitLayoutsByAnchor: byAnchor,
+          workspaceSplitLayoutsByAnchor: exclusiveByAnchor,
           activeWorkspaceSplitAnchorId: activeUsable ? persistedActiveAnchor : null,
           workspaceSplitAnchorMru: mru,
           workspaceSplitMaximizedPaneId: maximizedUsable ? persistedMaximized : null
