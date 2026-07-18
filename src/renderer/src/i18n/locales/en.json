@@ -4355,7 +4355,8 @@
           "workspaceSection": "Workspace",
           "primaryDeleteDisabled": "Primary worktree — can't be deleted. Remove the project instead.",
           "deleteWorktree": "Delete Worktree",
-          "openToTheSide": "Open to the Side"
+          "openToTheSide": "Open to the Side",
+          "removeFromSplit": "Remove from Split"
         },
         "WorktreeList": {
           "7a8b9c0d1e": "Update required",
@@ -13258,6 +13259,11 @@
           },
           "undo": "Undo",
           "widthOption": "{{value0}} px"
+        }
+      },
+      "workspaceSplit": {
+        "paneClose": {
+          "title": "Remove from split (keeps the project and its terminals)"
         }
       }
     },

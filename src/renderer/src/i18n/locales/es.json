@@ -4309,7 +4309,8 @@
           "workspaceSection": "Espacio de trabajo",
           "primaryDeleteDisabled": "El worktree principal no se puede eliminar. Quita el proyecto en su lugar.",
           "deleteWorktree": "Eliminar worktree",
-          "openToTheSide": "Open to the Side"
+          "openToTheSide": "Open to the Side",
+          "removeFromSplit": "Remove from Split"
         },
         "WorktreeList": {
           "d880ea0744": "Crea un grupo y mueve este proyecto a él.",
@@ -13235,6 +13236,11 @@
           },
           "undo": "Deshacer",
           "widthOption": "{{value0}} px"
+        }
+      },
+      "workspaceSplit": {
+        "paneClose": {
+          "title": "Remove from split (keeps the project and its terminals)"
         }
       }
     },

@@ -4290,7 +4290,8 @@
           "workspaceSection": "워크스페이스",
           "primaryDeleteDisabled": "기본 작업 트리는 삭제할 수 없습니다. 대신 프로젝트를 제거하세요.",
           "deleteWorktree": "작업 트리 삭제",
-          "openToTheSide": "Open to the Side"
+          "openToTheSide": "Open to the Side",
+          "removeFromSplit": "Remove from Split"
         },
         "WorktreeList": {
           "d880ea0744": "그룹을 만들고 이 프로젝트를 그룹으로 이동하세요.",
@@ -13235,6 +13236,11 @@
           },
           "undo": "실행 취소",
           "widthOption": "{{value0}} px"
+        }
+      },
+      "workspaceSplit": {
+        "paneClose": {
+          "title": "Remove from split (keeps the project and its terminals)"
         }
       }
     },

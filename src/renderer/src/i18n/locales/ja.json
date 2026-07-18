@@ -4290,7 +4290,8 @@
           "workspaceSection": "ワークスペース",
           "primaryDeleteDisabled": "プライマリワークツリーは削除できません。代わりにプロジェクトを削除してください。",
           "deleteWorktree": "ワークツリーを削除",
-          "openToTheSide": "Open to the Side"
+          "openToTheSide": "Open to the Side",
+          "removeFromSplit": "Remove from Split"
         },
         "WorktreeList": {
           "d880ea0744": "グループを作成し、このプロジェクトをそのグループに移動します。",
@@ -13235,6 +13236,11 @@
           },
           "undo": "元に戻す",
           "widthOption": "{{value0}} px"
+        }
+      },
+      "workspaceSplit": {
+        "paneClose": {
+          "title": "Remove from split (keeps the project and its terminals)"
         }
       }
     },

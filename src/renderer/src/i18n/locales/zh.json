@@ -4290,7 +4290,8 @@
           "workspaceSection": "工作区",
           "primaryDeleteDisabled": "主工作树不能删除。请改为移除项目。",
           "deleteWorktree": "删除工作树",
-          "openToTheSide": "Open to the Side"
+          "openToTheSide": "Open to the Side",
+          "removeFromSplit": "Remove from Split"
         },
         "WorktreeList": {
           "d880ea0744": "创建一个组并将该项目移入其中。",
@@ -13235,6 +13236,11 @@
           },
           "undo": "撤销",
           "widthOption": "{{value0}} px"
+        }
+      },
+      "workspaceSplit": {
+        "paneClose": {
+          "title": "Remove from split (keeps the project and its terminals)"
         }
       }
     },

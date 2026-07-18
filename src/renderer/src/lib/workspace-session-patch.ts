@@ -151,6 +151,15 @@ export function buildWorkspaceSessionPatch(
   if (changed.has('workspaceSplitLayout')) {
     patch.workspaceSplitLayoutOnShutdown = snapshot.workspaceSplitLayout ?? undefined
   }
+  if (changed.has('workspaceSplitLayoutsByAnchor')) {
+    patch.workspaceSplitLayoutsByAnchorOnShutdown = snapshot.workspaceSplitLayoutsByAnchor
+  }
+  if (changed.has('activeWorkspaceSplitAnchorId')) {
+    patch.activeWorkspaceSplitAnchorOnShutdown = snapshot.activeWorkspaceSplitAnchorId
+  }
+  if (changed.has('workspaceSplitAnchorMru')) {
+    patch.workspaceSplitAnchorMruOnShutdown = snapshot.workspaceSplitAnchorMru
+  }
 
   return patch
 }

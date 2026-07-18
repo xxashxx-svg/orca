@@ -147,13 +147,32 @@ describe('workspace-split-view slice', () => {
     expect(store.getState().workspaceSplitLayout).toBeNull()
   })
 
-  describe('setActiveWorktree reconciliation', () => {
-    it('replaces the focused pane leaf when activating an off-screen worktree', () => {
+  describe('setActiveWorktree reconciliation (split associations)', () => {
+    it('activating an unrelated worktree leaves the split behind as a saved association', () => {
       store.getState().openWorkspacePane(WT(2))
       store.getState().setActiveWorktree(WT(3))
-      const layout = store.getState().workspaceSplitLayout
-      expect(collectPaneIds(layout!)).toEqual([WT(3), WT(2)])
+      expect(store.getState().workspaceSplitLayout).toBeNull()
       expect(store.getState().activeWorktreeId).toBe(WT(3))
+      expect(Object.keys(store.getState().workspaceSplitLayoutsByAnchor)).toEqual([WT(1)])
+    })
+
+    it('activating a member of a saved split restores it', () => {
+      store.getState().openWorkspacePane(WT(2))
+      store.getState().setActiveWorktree(WT(3))
+      store.getState().setActiveWorktree(WT(2))
+      expect(collectPaneIds(store.getState().workspaceSplitLayout!)).toEqual([WT(1), WT(2)])
+      expect(store.getState().activeWorktreeId).toBe(WT(2))
+    })
+
+    it('picks the most recently shown split when a worktree belongs to two', () => {
+      // WT(2) joins a split anchored at WT(1), then one anchored at WT(3).
+      store.getState().openWorkspacePane(WT(2))
+      store.getState().setActiveWorktree(WT(3))
+      store.getState().openWorkspacePane(WT(2))
+      store.getState().setActiveWorktree(WT(4))
+      store.getState().setActiveWorktree(WT(2))
+      expect(store.getState().activeWorkspaceSplitAnchorId).toBe(WT(3))
+      expect(collectPaneIds(store.getState().workspaceSplitLayout!)).toEqual([WT(3), WT(2)])
     })
 
     it('keeps the layout unchanged when activating an already-visible pane', () => {
@@ -164,9 +183,30 @@ describe('workspace-split-view slice', () => {
       expect(store.getState().activeWorktreeId).toBe(WT(2))
     })
 
-    it('clears the layout when the active worktree is cleared', () => {
+    it('clears the on-screen layout but keeps saved splits when active is cleared', () => {
       store.getState().openWorkspacePane(WT(2))
       store.getState().setActiveWorktree(null)
+      expect(store.getState().workspaceSplitLayout).toBeNull()
+      expect(Object.keys(store.getState().workspaceSplitLayoutsByAnchor)).toEqual([WT(1)])
+    })
+  })
+
+  describe('closeWorkspacePane (send back)', () => {
+    it('dissolves a two-pane split and drops the saved association', () => {
+      store.getState().openWorkspacePane(WT(2))
+      store.getState().closeWorkspacePane(WT(2))
+      expect(store.getState().workspaceSplitLayout).toBeNull()
+      expect(store.getState().workspaceSplitLayoutsByAnchor).toEqual({})
+      // The dissolved pair no longer reopens together.
+      store.getState().setActiveWorktree(WT(2))
+      expect(store.getState().workspaceSplitLayout).toBeNull()
+    })
+
+    it('refocuses a surviving pane when the focused pane is closed', () => {
+      store.getState().openWorkspacePane(WT(2))
+      store.getState().setActiveWorktree(WT(2))
+      store.getState().closeWorkspacePane(WT(2))
+      expect(store.getState().activeWorktreeId).toBe(WT(1))
       expect(store.getState().workspaceSplitLayout).toBeNull()
     })
   })

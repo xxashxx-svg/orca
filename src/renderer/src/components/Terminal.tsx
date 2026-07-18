@@ -58,6 +58,7 @@ import TabGroupSplitLayout from './tab-group/TabGroupSplitLayout'
 import AiVaultSessionDropLayer from './tab-group/AiVaultSessionDropLayer'
 import WorkspaceSplitDividers from './workspace-split/WorkspaceSplitDividers'
 import WorkspaceSplitDropOverlay from './workspace-split/WorkspaceSplitDropOverlay'
+import WorkspaceSplitPaneCloseButtons from './workspace-split/WorkspaceSplitPaneCloseButtons'
 import {
   computeWorkspaceSplitGeometry,
   type WorkspacePaneFrame
@@ -1001,7 +1002,11 @@ function Terminal(): React.JSX.Element | null {
       const tabs = tabsByWorktree[worktreeId] ?? []
       if (
         !tabs.every((tab) =>
-          canWatcherCoverParkedTerminalTab(worktreeId, tab, terminalProviderHasAuthoritativeSnapshot)
+          canWatcherCoverParkedTerminalTab(
+            worktreeId,
+            tab,
+            terminalProviderHasAuthoritativeSnapshot
+          )
         )
       ) {
         nextParkedTerminalWorktreeIds.delete(worktreeId)
@@ -2379,10 +2384,15 @@ function Terminal(): React.JSX.Element | null {
               )
             })}
           {workspaceSplitGeometry && activeView === 'terminal' ? (
-            <WorkspaceSplitDividers
-              dividers={workspaceSplitGeometry.dividers}
-              containerRef={workspaceSplitContainerRef}
-            />
+            <>
+              <WorkspaceSplitDividers
+                dividers={workspaceSplitGeometry.dividers}
+                containerRef={workspaceSplitContainerRef}
+              />
+              <WorkspaceSplitPaneCloseButtons
+                frameByWorktreeId={workspaceSplitGeometry.frameByWorktreeId}
+              />
+            </>
           ) : null}
           {sideBySideWorkspacesEnabled ? <WorkspaceSplitDropOverlay /> : null}
         </div>

@@ -1102,6 +1102,11 @@ export type WorkspaceSessionState = {
   /** Side-by-side pane tree at shutdown (experimentalSideBySideWorkspaces).
    *  Restored only when the flag is on and every leaf still resolves. */
   workspaceSplitLayoutOnShutdown?: WorkspacePaneNode
+  /** Saved split associations keyed by anchor project, plus which one was on
+   *  screen and their recency order. All additive-optional. */
+  workspaceSplitLayoutsByAnchorOnShutdown?: Record<string, WorkspacePaneNode>
+  activeWorkspaceSplitAnchorOnShutdown?: string | null
+  workspaceSplitAnchorMruOnShutdown?: string[]
   /** Editor files that were open at shutdown, keyed by worktree ID.
    *  Only edit-mode files are persisted — diffs and conflict views are
    *  transient and not restored. */

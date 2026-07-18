@@ -10,6 +10,7 @@ import type {
   TuiAgent,
   Worktree,
   WorkspaceKey,
+  WorkspacePaneNode,
   WorkspaceSessionState
 } from '../../../../shared/types'
 import type {
@@ -3407,32 +3408,59 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
         nextEverActivated.add(activeWorktreeId)
       }
 
-      // Why: restore side-by-side panes only when the flag is on and the tree
-      // still resolves; unknown leaves are pruned and a focus outside the
-      // panes collapses to single view rather than rendering orphan panes.
-      const restoredWorkspaceSplitLayout = (() => {
-        const persisted = session.workspaceSplitLayoutOnShutdown
-        if (!persisted || s.settings?.experimentalSideBySideWorkspaces !== true) {
-          return null
+      // Why: restore saved split associations only when the flag is on; stale
+      // leaves are pruned, entries below 2 leaves dissolve, and the on-screen
+      // split is restored only if the focused worktree is one of its members.
+      // Legacy single-layout sessions become a one-entry map.
+      const restoredSplitState = (() => {
+        const empty = {
+          workspaceSplitLayout: null as WorkspacePaneNode | null,
+          workspaceSplitLayoutsByAnchor: {} as Record<string, WorkspacePaneNode>,
+          activeWorkspaceSplitAnchorId: null as string | null,
+          workspaceSplitAnchorMru: [] as string[]
         }
-        const staleLeafIds = new Set(
-          collectPaneIds(persisted).filter((paneId) => !validWorktreeIds.has(paneId))
+        if (s.settings?.experimentalSideBySideWorkspaces !== true) {
+          return empty
+        }
+        const legacyLayout = session.workspaceSplitLayoutOnShutdown
+        const persistedMap =
+          session.workspaceSplitLayoutsByAnchorOnShutdown ??
+          (legacyLayout ? { [collectPaneIds(legacyLayout)[0]]: legacyLayout } : {})
+        const byAnchor: Record<string, WorkspacePaneNode> = {}
+        for (const [anchorId, layout] of Object.entries(persistedMap)) {
+          const staleLeafIds = new Set(
+            collectPaneIds(layout).filter((paneId) => !validWorktreeIds.has(paneId))
+          )
+          const pruned = pruneWorkspaceSplitLayout(layout, staleLeafIds)
+          if (pruned) {
+            byAnchor[anchorId] = pruned
+          }
+        }
+        const mru = (session.workspaceSplitAnchorMruOnShutdown ?? Object.keys(byAnchor)).filter(
+          (anchorId) => byAnchor[anchorId]
         )
-        const pruned = pruneWorkspaceSplitLayout(persisted, staleLeafIds)
-        if (!pruned) {
-          return null
+        const persistedActiveAnchor = session.activeWorkspaceSplitAnchorOnShutdown ?? mru[0] ?? null
+        const activeLayout = persistedActiveAnchor
+          ? (byAnchor[persistedActiveAnchor] ?? null)
+          : null
+        const activeUsable = Boolean(
+          activeLayout &&
+          activeWorktreeId &&
+          workspaceSplitContainsPane(activeLayout, activeWorktreeId)
+        )
+        return {
+          workspaceSplitLayout: activeUsable ? activeLayout : null,
+          workspaceSplitLayoutsByAnchor: byAnchor,
+          activeWorkspaceSplitAnchorId: activeUsable ? persistedActiveAnchor : null,
+          workspaceSplitAnchorMru: mru
         }
-        if (activeWorktreeId && !workspaceSplitContainsPane(pruned, activeWorktreeId)) {
-          return null
-        }
-        return pruned
       })()
 
       return {
         activeRepoId,
         activeWorktreeId,
         activeWorkspaceKey,
-        workspaceSplitLayout: restoredWorkspaceSplitLayout,
+        ...restoredSplitState,
         activeTabId,
         activeTabIdByWorktree,
         restoredRuntimeHostIdByWorkspaceSessionKey:

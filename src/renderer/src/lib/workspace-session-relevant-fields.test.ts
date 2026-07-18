@@ -33,7 +33,10 @@ describe('SESSION_RELEVANT_FIELDS', () => {
     lastVisitedAtByWorktreeId: true,
     defaultTerminalTabsAppliedByWorktreeId: true,
     sleepingAgentSessionsByPaneKey: true,
-    workspaceSplitLayout: true
+    workspaceSplitLayout: true,
+    workspaceSplitLayoutsByAnchor: true,
+    activeWorkspaceSplitAnchorId: true,
+    workspaceSplitAnchorMru: true
   }
 
   it('contains every key of WorkspaceSessionSnapshot', () => {

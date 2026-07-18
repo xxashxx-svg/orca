@@ -32,9 +32,8 @@ import {
 } from './recently-closed-tabs'
 import { findRepoForHost } from './repo-host-identity'
 import {
-  collectPaneIds,
-  pruneWorkspaceSplitLayout,
-  replaceWorkspacePaneLeaf,
+  findWorkspaceSplitAnchorForWorktree,
+  pruneWorkspaceSplitState,
   workspaceSplitContainsPane
 } from './workspace-split-view'
 import { ensureHooksConfirmed } from '@/lib/ensure-hooks-confirmed'
@@ -2278,9 +2277,9 @@ function buildWorktreePurgeState(s: AppState, worktreeIds: string[]): Partial<Ap
       s.defaultTerminalTabsAppliedByWorktreeId
     ),
     activeWorktreeId: removedActive ? null : s.activeWorktreeId,
-    // Why: side-by-side panes must never point at removed worktrees; this runs
-    // regardless of the experimental flag so stale state can't strand.
-    workspaceSplitLayout: pruneWorkspaceSplitLayout(s.workspaceSplitLayout, worktreeIdSet),
+    // Why: side-by-side panes (active AND saved) must never point at removed
+    // worktrees; this runs regardless of the experimental flag.
+    ...pruneWorkspaceSplitState(s, worktreeIdSet),
     activeWorkspaceKey: (() => {
       if (s.activeWorkspaceKey && worktreeIdSet.has(s.activeWorkspaceKey)) {
         return null
@@ -4545,20 +4544,33 @@ export const createWorktreeSlice: StateCreator<AppState, [], [], WorktreeSlice> 
           // Why: activating any real worktree (or clearing it) must dismiss the
           // background-creation panel so the user isn't stranded on it.
           activePendingCreationId: null,
-          // No focused worktree means no side-by-side panes to anchor to.
-          workspaceSplitLayout: null
+          // No focused worktree means nothing to show; saved splits survive.
+          workspaceSplitLayout: null,
+          activeWorkspaceSplitAnchorId: null
         }
       }
 
-      // Why: with side-by-side panes open, activating an off-screen worktree
-      // replaces the focused pane's project instead of tearing the split down.
+      // Why: splits are project associations. Activating a member of a saved
+      // split restores that split; activating anything else shows it alone,
+      // leaving the current split behind intact for its own members.
       let nextSplitLayout = s.workspaceSplitLayout
-      if (nextSplitLayout && !workspaceSplitContainsPane(nextSplitLayout, worktreeId)) {
-        const replacedPaneId =
-          s.activeWorktreeId && workspaceSplitContainsPane(nextSplitLayout, s.activeWorktreeId)
-            ? s.activeWorktreeId
-            : collectPaneIds(nextSplitLayout)[0]
-        nextSplitLayout = replaceWorkspacePaneLeaf(nextSplitLayout, replacedPaneId, worktreeId)
+      let nextSplitAnchorId = s.activeWorkspaceSplitAnchorId
+      let nextSplitAnchorMru = s.workspaceSplitAnchorMru
+      if (!nextSplitLayout || !workspaceSplitContainsPane(nextSplitLayout, worktreeId)) {
+        const savedAnchorId = findWorkspaceSplitAnchorForWorktree(s, worktreeId)
+        if (savedAnchorId) {
+          nextSplitLayout = s.workspaceSplitLayoutsByAnchor[savedAnchorId] ?? null
+          nextSplitAnchorId = nextSplitLayout ? savedAnchorId : null
+          if (nextSplitLayout) {
+            nextSplitAnchorMru = [
+              savedAnchorId,
+              ...s.workspaceSplitAnchorMru.filter((anchorId) => anchorId !== savedAnchorId)
+            ]
+          }
+        } else {
+          nextSplitLayout = null
+          nextSplitAnchorId = null
+        }
       }
 
       const worktree = findKnownWorktreeById(s, worktreeId)
@@ -4767,7 +4779,9 @@ export const createWorktreeSlice: StateCreator<AppState, [], [], WorktreeSlice> 
         nextEverActivated !== s.everActivatedWorktreeIds ||
         nextWorktrees !== s.worktreesByRepo ||
         nextDetectedWorktrees !== s.detectedWorktreesByRepo ||
-        nextSplitLayout !== s.workspaceSplitLayout
+        nextSplitLayout !== s.workspaceSplitLayout ||
+        nextSplitAnchorId !== s.activeWorkspaceSplitAnchorId ||
+        nextSplitAnchorMru !== s.workspaceSplitAnchorMru
       if (!hasStateChange) {
         // Why: repeated activation of the already-active worktree can come from
         // clicks, IPC, and automation restore paths. Preserve the root Zustand
@@ -4792,6 +4806,12 @@ export const createWorktreeSlice: StateCreator<AppState, [], [], WorktreeSlice> 
           : {}),
         ...(nextSplitLayout !== s.workspaceSplitLayout
           ? { workspaceSplitLayout: nextSplitLayout }
+          : {}),
+        ...(nextSplitAnchorId !== s.activeWorkspaceSplitAnchorId
+          ? { activeWorkspaceSplitAnchorId: nextSplitAnchorId }
+          : {}),
+        ...(nextSplitAnchorMru !== s.workspaceSplitAnchorMru
+          ? { workspaceSplitAnchorMru: nextSplitAnchorMru }
           : {}),
         ...tabsByWorktreeUpdate
       }

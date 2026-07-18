@@ -59,6 +59,9 @@ export type WorkspaceSessionSnapshot = Pick<
 > & {
   sleepingAgentSessionsByPaneKey?: AppState['sleepingAgentSessionsByPaneKey']
   workspaceSplitLayout?: AppState['workspaceSplitLayout']
+  workspaceSplitLayoutsByAnchor?: AppState['workspaceSplitLayoutsByAnchor']
+  activeWorkspaceSplitAnchorId?: AppState['activeWorkspaceSplitAnchorId']
+  workspaceSplitAnchorMru?: AppState['workspaceSplitAnchorMru']
 }
 
 // Why: the App-level Zustand subscriber that debounces session writes uses
@@ -96,7 +99,10 @@ export const SESSION_RELEVANT_FIELDS = [
   'lastVisitedAtByWorktreeId',
   'defaultTerminalTabsAppliedByWorktreeId',
   'sleepingAgentSessionsByPaneKey',
-  'workspaceSplitLayout'
+  'workspaceSplitLayout',
+  'workspaceSplitLayoutsByAnchor',
+  'activeWorkspaceSplitAnchorId',
+  'workspaceSplitAnchorMru'
 ] as const satisfies readonly (keyof WorkspaceSessionSnapshot)[]
 
 type _MissingSessionField = Exclude<
@@ -250,6 +256,9 @@ export function buildWorkspaceSessionPayload(
     // field silently disables eager terminal reconnect on the next restart.
     activeWorktreeIdsOnShutdown: terminalSessionData.activeWorktreeIdsOnShutdown,
     workspaceSplitLayoutOnShutdown: snapshot.workspaceSplitLayout ?? undefined,
+    workspaceSplitLayoutsByAnchorOnShutdown: snapshot.workspaceSplitLayoutsByAnchor,
+    activeWorkspaceSplitAnchorOnShutdown: snapshot.activeWorkspaceSplitAnchorId,
+    workspaceSplitAnchorMruOnShutdown: snapshot.workspaceSplitAnchorMru,
     activeTabIdByWorktree: snapshot.activeTabIdByWorktree,
     ...buildEditorSessionData(
       snapshot.openFiles,

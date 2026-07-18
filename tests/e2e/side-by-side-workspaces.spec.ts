@@ -12,7 +12,12 @@
 
 import { test, expect } from './helpers/orca-app'
 import type { Page } from '@stablyai/playwright-test'
-import { getActiveWorktreeId, waitForActiveWorktree, waitForSessionReady } from './helpers/store'
+import {
+  getActiveWorktreeId,
+  switchToWorktree,
+  waitForActiveWorktree,
+  waitForSessionReady
+} from './helpers/store'
 import { worktreeRow } from './worktree-row-locators'
 
 type SplitLeafIds = string[]
@@ -128,13 +133,23 @@ test.describe('side-by-side workspaces', () => {
       )
       .toBe('split')
 
-    // Closing the split from the store collapses back to single view and the
-    // remaining pane stays focused.
-    await page.evaluate((removeId) => {
-      window.__store?.getState().closeWorkspacePane(removeId)
-    }, sideId)
+    // Splits are associations: activating an unrelated worktree shows it
+    // alone, and activating a member restores the split.
+    const unrelatedId = await createSecondWorktree(page, `e2e-unrelated-${Date.now()}`)
+    await switchToWorktree(page, unrelatedId)
+    await expect.poll(() => getSplitLeafIds(page)).toEqual([])
+    await expect.poll(() => getActiveWorktreeId(page)).toBe(unrelatedId)
+    await switchToWorktree(page, primaryId)
+    await expect.poll(() => getSplitLeafIds(page)).toEqual([primaryId, sideId])
+
+    // The pane's ✕ chip sends it back: the split dissolves, focus stays on
+    // the surviving pane, and the pair no longer reopens together.
+    await page.locator(`[data-workspace-pane-close=${JSON.stringify(sideId)}]`).click()
     await expect.poll(() => getSplitLeafIds(page)).toEqual([])
     expect(await getActiveWorktreeId(page)).toBe(primaryId)
+    await switchToWorktree(page, sideId)
+    await switchToWorktree(page, primaryId)
+    await expect.poll(() => getSplitLeafIds(page)).toEqual([])
   })
 
   test('dragging a project card into the workspace body opens a split', async ({

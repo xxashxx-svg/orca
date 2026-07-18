@@ -1,20 +1,37 @@
 import type { StateCreator } from 'zustand'
 import type { AppState } from '../types'
-import type { TabGroupSplitDirection, WorkspacePaneNode } from '../../../../shared/types'
+import type { WorkspacePaneNode } from '../../../../shared/types'
 import { findWorktreeById } from './worktree-helpers'
+import {
+  MAX_WORKSPACE_SPLIT_PANES,
+  bumpWorkspaceSplitAnchorMru,
+  clampWorkspaceSplitRatio,
+  collectPaneIds,
+  pruneWorkspaceSplitState,
+  removeWorkspacePaneLeaves,
+  replaceWorkspacePaneLeaf,
+  splitWorkspacePaneLeaf,
+  updateWorkspaceSplitRatioAtPath,
+  workspaceSplitContainsPane,
+  type WorkspacePaneOpenEdge
+} from './workspace-split-layout-tree'
 
-/** Hard ceiling on visible worktree panes — each pane streams live PTY bytes
- *  and runs its own git poll, so an unbounded tree would melt slow hosts. */
-export const MAX_WORKSPACE_SPLIT_PANES = 6
-
-export const WORKSPACE_SPLIT_MIN_RATIO = 0.2
-export const WORKSPACE_SPLIT_MAX_RATIO = 0.8
-
-export type WorkspacePaneOpenEdge = 'left' | 'right' | 'up' | 'down' | 'replace'
+// Re-exported so tree helpers keep their historical import path.
+export * from './workspace-split-layout-tree'
 
 export type WorkspaceSplitViewSlice = {
-  /** Outer split tree of worktree panes; null = classic single view. */
+  /** Outer split tree of worktree panes currently ON SCREEN; null = classic
+   *  single view. Always mirrors workspaceSplitLayoutsByAnchor[activeAnchor]. */
   workspaceSplitLayout: WorkspacePaneNode | null
+  /** Saved splits keyed by anchor (the project that was full-screen when the
+   *  split was created). Why: a split is an association between projects —
+   *  activating a member project restores its split, activating anything else
+   *  leaves the split behind intact until a pane is explicitly closed. */
+  workspaceSplitLayoutsByAnchor: Record<string, WorkspacePaneNode>
+  activeWorkspaceSplitAnchorId: string | null
+  /** Anchor ids, most recently shown first — picks the split to restore when
+   *  a project belongs to more than one saved split. */
+  workspaceSplitAnchorMru: string[]
   /** Add worktreeId next to (or in place of) targetWorktreeId. Defaults:
    *  target = activeWorktreeId, edge = 'right'. Returns false when gated off,
    *  invalid, already visible, or at the pane cap. */
@@ -22,7 +39,9 @@ export type WorkspaceSplitViewSlice = {
     worktreeId: string,
     opts?: { targetWorktreeId?: string; edge?: WorkspacePaneOpenEdge }
   ) => boolean
-  /** Remove a pane, merging its sibling up. Collapses to null below 2 leaves. */
+  /** Remove a pane from the active split ("send it back"). Dissolves the
+   *  saved association below 2 leaves and refocuses a survivor when the
+   *  closed pane was the focused one. */
   closeWorkspacePane: (worktreeId: string) => void
   /** Resize the split that directly contains worktreeId's pane as a child. */
   setWorkspaceSplitRatio: (splitPath: readonly ('first' | 'second')[], ratio: number) => void
@@ -45,118 +64,6 @@ export function selectVisibleWorkspacePaneIds(
   return state.activeWorktreeId ? [state.activeWorktreeId] : []
 }
 
-export function collectPaneIds(node: WorkspacePaneNode): string[] {
-  if (node.type === 'pane') {
-    return [node.worktreeId]
-  }
-  return [...collectPaneIds(node.first), ...collectPaneIds(node.second)]
-}
-
-export function workspaceSplitContainsPane(
-  node: WorkspacePaneNode | null,
-  worktreeId: string
-): boolean {
-  if (!node) {
-    return false
-  }
-  return collectPaneIds(node).includes(worktreeId)
-}
-
-/** Swap one leaf's worktree for another (sidebar-click "replace focused pane"). */
-export function replaceWorkspacePaneLeaf(
-  node: WorkspacePaneNode,
-  fromWorktreeId: string,
-  toWorktreeId: string
-): WorkspacePaneNode {
-  if (node.type === 'pane') {
-    return node.worktreeId === fromWorktreeId ? { type: 'pane', worktreeId: toWorktreeId } : node
-  }
-  return {
-    ...node,
-    first: replaceWorkspacePaneLeaf(node.first, fromWorktreeId, toWorktreeId),
-    second: replaceWorkspacePaneLeaf(node.second, fromWorktreeId, toWorktreeId)
-  }
-}
-
-function edgeToSplit(edge: Exclude<WorkspacePaneOpenEdge, 'replace'>): {
-  direction: TabGroupSplitDirection
-  newFirst: boolean
-} {
-  // horizontal = side-by-side columns, matching TabGroupLayoutNode semantics.
-  switch (edge) {
-    case 'left':
-      return { direction: 'horizontal', newFirst: true }
-    case 'right':
-      return { direction: 'horizontal', newFirst: false }
-    case 'up':
-      return { direction: 'vertical', newFirst: true }
-    case 'down':
-      return { direction: 'vertical', newFirst: false }
-  }
-}
-
-function splitLeaf(
-  node: WorkspacePaneNode,
-  targetWorktreeId: string,
-  newWorktreeId: string,
-  edge: Exclude<WorkspacePaneOpenEdge, 'replace'>
-): WorkspacePaneNode {
-  if (node.type === 'pane') {
-    if (node.worktreeId !== targetWorktreeId) {
-      return node
-    }
-    const { direction, newFirst } = edgeToSplit(edge)
-    const newPane: WorkspacePaneNode = { type: 'pane', worktreeId: newWorktreeId }
-    return {
-      type: 'split',
-      direction,
-      first: newFirst ? newPane : node,
-      second: newFirst ? node : newPane,
-      ratio: 0.5
-    }
-  }
-  return {
-    ...node,
-    first: splitLeaf(node.first, targetWorktreeId, newWorktreeId, edge),
-    second: splitLeaf(node.second, targetWorktreeId, newWorktreeId, edge)
-  }
-}
-
-function removeLeaves(
-  node: WorkspacePaneNode,
-  worktreeIds: ReadonlySet<string>
-): WorkspacePaneNode | null {
-  if (node.type === 'pane') {
-    return worktreeIds.has(node.worktreeId) ? null : node
-  }
-  const first = removeLeaves(node.first, worktreeIds)
-  const second = removeLeaves(node.second, worktreeIds)
-  if (first && second) {
-    return first === node.first && second === node.second ? node : { ...node, first, second }
-  }
-  return first ?? second
-}
-
-function clampRatio(ratio: number): number {
-  return Math.min(WORKSPACE_SPLIT_MAX_RATIO, Math.max(WORKSPACE_SPLIT_MIN_RATIO, ratio))
-}
-
-/** Drop leaves for removed worktrees; collapses to null below 2 leaves.
- *  Returns the same reference when nothing changed (Zustand no-op safe). */
-export function pruneWorkspaceSplitLayout(
-  layout: WorkspacePaneNode | null,
-  removedWorktreeIds: ReadonlySet<string>
-): WorkspacePaneNode | null {
-  if (!layout || removedWorktreeIds.size === 0) {
-    return layout
-  }
-  if (!collectPaneIds(layout).some((id) => removedWorktreeIds.has(id))) {
-    return layout
-  }
-  const next = removeLeaves(layout, removedWorktreeIds)
-  return next && next.type === 'split' ? next : null
-}
-
 export const createWorkspaceSplitViewSlice: StateCreator<
   AppState,
   [],
@@ -164,6 +71,9 @@ export const createWorkspaceSplitViewSlice: StateCreator<
   WorkspaceSplitViewSlice
 > = (set, get) => ({
   workspaceSplitLayout: null,
+  workspaceSplitLayoutsByAnchor: {},
+  activeWorkspaceSplitAnchorId: null,
+  workspaceSplitAnchorMru: [],
 
   openWorkspacePane: (worktreeId, opts) => {
     const s = get()
@@ -179,6 +89,23 @@ export const createWorkspaceSplitViewSlice: StateCreator<
     if (!target) {
       return false
     }
+    // Why: a mutation either edits the on-screen split under its existing
+    // anchor, or mints a new association anchored at the current single view.
+    const anchorId = layout ? s.activeWorkspaceSplitAnchorId : target
+    if (!anchorId) {
+      return false
+    }
+    const commitActiveLayout = (next: WorkspacePaneNode): void => {
+      set({
+        workspaceSplitLayout: next,
+        activeWorkspaceSplitAnchorId: anchorId,
+        workspaceSplitLayoutsByAnchor: {
+          ...s.workspaceSplitLayoutsByAnchor,
+          [anchorId]: next
+        },
+        workspaceSplitAnchorMru: bumpWorkspaceSplitAnchorMru(s.workspaceSplitAnchorMru, anchorId)
+      })
+    }
     if (edge === 'replace') {
       if (!layout || !workspaceSplitContainsPane(layout, target) || target === worktreeId) {
         return false
@@ -187,7 +114,7 @@ export const createWorkspaceSplitViewSlice: StateCreator<
       if (workspaceSplitContainsPane(layout, worktreeId)) {
         return false
       }
-      set({ workspaceSplitLayout: replaceWorkspacePaneLeaf(layout, target, worktreeId) })
+      commitActiveLayout(replaceWorkspacePaneLeaf(layout, target, worktreeId))
       return true
     }
     if (worktreeId === target && !layout) {
@@ -203,51 +130,71 @@ export const createWorkspaceSplitViewSlice: StateCreator<
     if (collectPaneIds(base).length >= MAX_WORKSPACE_SPLIT_PANES) {
       return false
     }
-    set({ workspaceSplitLayout: splitLeaf(base, target, worktreeId, edge) })
+    commitActiveLayout(splitWorkspacePaneLeaf(base, target, worktreeId, edge))
     return true
   },
 
   closeWorkspacePane: (worktreeId) => {
-    const layout = get().workspaceSplitLayout
-    if (!layout) {
+    const s = get()
+    const layout = s.workspaceSplitLayout
+    const anchorId = s.activeWorkspaceSplitAnchorId
+    if (!layout || !anchorId || !workspaceSplitContainsPane(layout, worktreeId)) {
       return
     }
-    const next = removeLeaves(layout, new Set([worktreeId]))
-    set({ workspaceSplitLayout: next && next.type === 'split' ? next : null })
+    const removed = removeWorkspacePaneLeaves(layout, new Set([worktreeId]))
+    const survivorIds = removed ? collectPaneIds(removed) : []
+    if (removed && removed.type === 'split') {
+      set({
+        workspaceSplitLayout: removed,
+        workspaceSplitLayoutsByAnchor: {
+          ...s.workspaceSplitLayoutsByAnchor,
+          [anchorId]: removed
+        }
+      })
+    } else {
+      // Below 2 leaves the association dissolves — the closed pane's project
+      // is simply reachable standalone again, terminals untouched.
+      const nextByAnchor = { ...s.workspaceSplitLayoutsByAnchor }
+      delete nextByAnchor[anchorId]
+      set({
+        workspaceSplitLayout: null,
+        activeWorkspaceSplitAnchorId: null,
+        workspaceSplitLayoutsByAnchor: nextByAnchor,
+        workspaceSplitAnchorMru: s.workspaceSplitAnchorMru.filter((id) => id !== anchorId)
+      })
+    }
+    // Why: closing the focused pane must land focus on what remains visible,
+    // not leave the removed project rendered full-width.
+    if (s.activeWorktreeId === worktreeId && survivorIds[0]) {
+      get().setActiveWorktree(survivorIds[0])
+    }
   },
 
   setWorkspaceSplitRatio: (splitPath, ratio) => {
-    const layout = get().workspaceSplitLayout
-    if (!layout) {
+    const s = get()
+    const layout = s.workspaceSplitLayout
+    const anchorId = s.activeWorkspaceSplitAnchorId
+    if (!layout || !anchorId) {
       return
     }
-    const next = updateRatioAtPath(layout, splitPath, clampRatio(ratio))
+    const next = updateWorkspaceSplitRatioAtPath(layout, splitPath, clampWorkspaceSplitRatio(ratio))
     if (next !== layout) {
-      set({ workspaceSplitLayout: next })
+      set({
+        workspaceSplitLayout: next,
+        workspaceSplitLayoutsByAnchor: { ...s.workspaceSplitLayoutsByAnchor, [anchorId]: next }
+      })
     }
   },
 
   removeWorktreesFromSplitView: (worktreeIds) => {
-    const layout = get().workspaceSplitLayout
-    const next = pruneWorkspaceSplitLayout(layout, new Set(worktreeIds))
-    if (next !== layout) {
-      set({ workspaceSplitLayout: next })
+    const s = get()
+    const next = pruneWorkspaceSplitState(s, new Set(worktreeIds))
+    if (
+      next.workspaceSplitLayout !== s.workspaceSplitLayout ||
+      next.workspaceSplitLayoutsByAnchor !== s.workspaceSplitLayoutsByAnchor ||
+      next.activeWorkspaceSplitAnchorId !== s.activeWorkspaceSplitAnchorId
+    ) {
+      set(next)
     }
   }
 })
-
-function updateRatioAtPath(
-  node: WorkspacePaneNode,
-  path: readonly ('first' | 'second')[],
-  ratio: number
-): WorkspacePaneNode {
-  if (node.type !== 'split') {
-    return node
-  }
-  if (path.length === 0) {
-    return node.ratio === ratio ? node : { ...node, ratio }
-  }
-  const [head, ...rest] = path
-  const child = updateRatioAtPath(node[head], rest, ratio)
-  return child === node[head] ? node : { ...node, [head]: child }
-}
