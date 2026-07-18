@@ -62,6 +62,7 @@ export type WorkspaceSessionSnapshot = Pick<
   workspaceSplitLayoutsByAnchor?: AppState['workspaceSplitLayoutsByAnchor']
   activeWorkspaceSplitAnchorId?: AppState['activeWorkspaceSplitAnchorId']
   workspaceSplitAnchorMru?: AppState['workspaceSplitAnchorMru']
+  workspaceSplitMaximizedPaneId?: AppState['workspaceSplitMaximizedPaneId']
 }
 
 // Why: the App-level Zustand subscriber that debounces session writes uses
@@ -102,7 +103,8 @@ export const SESSION_RELEVANT_FIELDS = [
   'workspaceSplitLayout',
   'workspaceSplitLayoutsByAnchor',
   'activeWorkspaceSplitAnchorId',
-  'workspaceSplitAnchorMru'
+  'workspaceSplitAnchorMru',
+  'workspaceSplitMaximizedPaneId'
 ] as const satisfies readonly (keyof WorkspaceSessionSnapshot)[]
 
 type _MissingSessionField = Exclude<
@@ -259,6 +261,7 @@ export function buildWorkspaceSessionPayload(
     workspaceSplitLayoutsByAnchorOnShutdown: snapshot.workspaceSplitLayoutsByAnchor,
     activeWorkspaceSplitAnchorOnShutdown: snapshot.activeWorkspaceSplitAnchorId,
     workspaceSplitAnchorMruOnShutdown: snapshot.workspaceSplitAnchorMru,
+    workspaceSplitMaximizedPaneOnShutdown: snapshot.workspaceSplitMaximizedPaneId,
     activeTabIdByWorktree: snapshot.activeTabIdByWorktree,
     ...buildEditorSessionData(
       snapshot.openFiles,

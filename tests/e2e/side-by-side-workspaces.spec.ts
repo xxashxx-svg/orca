@@ -142,6 +142,17 @@ test.describe('side-by-side workspaces', () => {
     await switchToWorktree(page, primaryId)
     await expect.poll(() => getSplitLeafIds(page)).toEqual([primaryId, sideId])
 
+    // Maximize shows one pane full-width with the split intact underneath;
+    // restore brings the grid back.
+    await page.locator(`[data-workspace-pane-maximize=${JSON.stringify(sideId)}]`).click()
+    await expect(stripFor(sideId).first()).toBeVisible()
+    await expect(stripFor(primaryId).first()).not.toBeVisible()
+    expect(await getSplitLeafIds(page)).toEqual([primaryId, sideId])
+    await expect.poll(() => getActiveWorktreeId(page)).toBe(sideId)
+    await page.locator(`[data-workspace-pane-restore=${JSON.stringify(sideId)}]`).click()
+    await expect(stripFor(primaryId).first()).toBeVisible()
+    await expect(stripFor(sideId).first()).toBeVisible()
+
     // The pane's ✕ chip sends it back: the split dissolves, focus stays on
     // the surviving pane, and the pair no longer reopens together.
     await page.locator(`[data-workspace-pane-close=${JSON.stringify(sideId)}]`).click()

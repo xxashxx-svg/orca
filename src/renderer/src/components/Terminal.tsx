@@ -62,7 +62,7 @@ import {
   computeWorkspaceSplitGeometry,
   type WorkspacePaneFrame
 } from './workspace-split/workspace-split-frames'
-import { collectPaneIds } from '../store/slices/workspace-split-view'
+import { collectPaneIds, workspaceSplitContainsPane } from '../store/slices/workspace-split-view'
 import { shouldAutoCreateInitialTerminal } from './terminal/initial-terminal'
 import { resolveRepairedActiveTerminalTabId } from './terminal/active-terminal-repair'
 import { scheduleBackgroundTerminalWorktreeMeasure } from './terminal/background-terminal-worktree-visibility'
@@ -271,18 +271,34 @@ function Terminal(): React.JSX.Element | null {
   const activeWorktreeId = useAppStore((s) => s.activeWorktreeId)
   const renderedActiveWorktreeId = activeWorktreeId
   const workspaceSplitLayout = useAppStore((s) => s.workspaceSplitLayout)
+  const workspaceSplitMaximizedPaneId = useAppStore((s) => s.workspaceSplitMaximizedPaneId)
+  // Why: a maximized pane borrows the classic single-view rendering (full
+  // frame, no dividers) while the split stays active underneath.
+  const effectiveMaximizedPaneId =
+    workspaceSplitLayout &&
+    workspaceSplitMaximizedPaneId &&
+    workspaceSplitContainsPane(workspaceSplitLayout, workspaceSplitMaximizedPaneId)
+      ? workspaceSplitMaximizedPaneId
+      : null
   const workspaceSplitGeometry = useMemo(
-    () => (workspaceSplitLayout ? computeWorkspaceSplitGeometry(workspaceSplitLayout) : null),
-    [workspaceSplitLayout]
+    () =>
+      workspaceSplitLayout && !effectiveMaximizedPaneId
+        ? computeWorkspaceSplitGeometry(workspaceSplitLayout)
+        : null,
+    [workspaceSplitLayout, effectiveMaximizedPaneId]
   )
   // Why: visibility is derived — the split tree's leaves when side-by-side
-  // panes are open, else just the focused worktree (classic single view).
+  // panes are open (just the maximized one while maximized), else the
+  // focused worktree (classic single view).
   const visiblePaneIdSet = useMemo(() => {
+    if (effectiveMaximizedPaneId) {
+      return new Set([effectiveMaximizedPaneId])
+    }
     if (workspaceSplitGeometry) {
       return new Set(workspaceSplitGeometry.frameByWorktreeId.keys())
     }
     return new Set(renderedActiveWorktreeId ? [renderedActiveWorktreeId] : [])
-  }, [workspaceSplitGeometry, renderedActiveWorktreeId])
+  }, [effectiveMaximizedPaneId, workspaceSplitGeometry, renderedActiveWorktreeId])
   const workspaceSplitContainerRef = useRef<HTMLDivElement | null>(null)
   const sideBySideWorkspacesEnabled = useAppStore(
     (s) => s.settings?.experimentalSideBySideWorkspaces === true
@@ -2370,6 +2386,13 @@ function Terminal(): React.JSX.Element | null {
                       ? (workspaceSplitGeometry?.frameByWorktreeId.get(workspace.id) ?? null)
                       : null
                   }
+                  workspacePaneControls={
+                    isVisible && workspaceSplitLayout
+                      ? effectiveMaximizedPaneId
+                        ? 'maximized'
+                        : 'grid'
+                      : null
+                  }
                   shouldMeasureHiddenWorktree={shouldMeasureHiddenWorktree}
                   shouldColdParkTerminalPanes={shouldColdParkTerminalPanes}
                   activityTerminalPortals={activityTerminalPortals}
@@ -2680,6 +2703,7 @@ const WorktreeSplitSurface = React.memo(function WorktreeSplitSurface({
   focusedGroupId,
   isVisible,
   splitFrame,
+  workspacePaneControls,
   shouldMeasureHiddenWorktree,
   shouldColdParkTerminalPanes,
   activityTerminalPortals,
@@ -2692,6 +2716,7 @@ const WorktreeSplitSurface = React.memo(function WorktreeSplitSurface({
   focusedGroupId?: string
   isVisible: boolean
   splitFrame?: WorkspacePaneFrame | null
+  workspacePaneControls?: 'grid' | 'maximized' | null
   shouldMeasureHiddenWorktree: boolean
   shouldColdParkTerminalPanes: boolean
   activityTerminalPortals: ActivityTerminalPortalTarget[]
@@ -2714,7 +2739,7 @@ const WorktreeSplitSurface = React.memo(function WorktreeSplitSurface({
   // touched. Capture-phase so promotion lands before TabGroupPanel.focusGroup,
   // keeping every existing activeWorktreeId guard correct.
   const promoteSplitPaneFocus = (): void => {
-    if (!isVisible || !splitFrame) {
+    if (!isVisible || !workspacePaneControls) {
       return
     }
     const state = useAppStore.getState()
@@ -2760,7 +2785,7 @@ const WorktreeSplitSurface = React.memo(function WorktreeSplitSurface({
         worktreeId={worktreeId}
         focusedGroupId={focusedGroupId}
         isWorktreeActive={isVisible}
-        workspacePaneClosable={Boolean(isVisible && splitFrame)}
+        workspacePaneControls={isVisible ? (workspacePaneControls ?? null) : null}
       />
       <TerminalPaneOverlayLayer
         worktreeId={worktreeId}

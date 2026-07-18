@@ -1107,6 +1107,7 @@ export type WorkspaceSessionState = {
   workspaceSplitLayoutsByAnchorOnShutdown?: Record<string, WorkspacePaneNode>
   activeWorkspaceSplitAnchorOnShutdown?: string | null
   workspaceSplitAnchorMruOnShutdown?: string[]
+  workspaceSplitMaximizedPaneOnShutdown?: string | null
   /** Editor files that were open at shutdown, keyed by worktree ID.
    *  Only edit-mode files are persisted — diffs and conflict views are
    *  transient and not restored. */

@@ -32,6 +32,11 @@ export type WorkspaceSplitViewSlice = {
   /** Anchor ids, most recently shown first — picks the split to restore when
    *  a project belongs to more than one saved split. */
   workspaceSplitAnchorMru: string[]
+  /** Temporarily show one pane of the active split full-width. The split
+   *  survives underneath; restore brings the grid back untouched. */
+  workspaceSplitMaximizedPaneId: string | null
+  maximizeWorkspacePane: (worktreeId: string) => void
+  restoreWorkspaceSplitPanes: () => void
   /** Add worktreeId next to (or in place of) targetWorktreeId. Defaults:
    *  target = activeWorktreeId, edge = 'right'. Returns false when gated off,
    *  invalid, already visible, or at the pane cap. */
@@ -74,6 +79,25 @@ export const createWorkspaceSplitViewSlice: StateCreator<
   workspaceSplitLayoutsByAnchor: {},
   activeWorkspaceSplitAnchorId: null,
   workspaceSplitAnchorMru: [],
+  workspaceSplitMaximizedPaneId: null,
+
+  maximizeWorkspacePane: (worktreeId) => {
+    const s = get()
+    if (!workspaceSplitContainsPane(s.workspaceSplitLayout, worktreeId)) {
+      return
+    }
+    set({ workspaceSplitMaximizedPaneId: worktreeId })
+    // Why: a full-width pane is what the user is working in; focus follows.
+    if (s.activeWorktreeId !== worktreeId) {
+      get().setActiveWorktree(worktreeId)
+    }
+  },
+
+  restoreWorkspaceSplitPanes: () => {
+    if (get().workspaceSplitMaximizedPaneId !== null) {
+      set({ workspaceSplitMaximizedPaneId: null })
+    }
+  },
 
   openWorkspacePane: (worktreeId, opts) => {
     const s = get()
@@ -103,7 +127,9 @@ export const createWorkspaceSplitViewSlice: StateCreator<
           ...s.workspaceSplitLayoutsByAnchor,
           [anchorId]: next
         },
-        workspaceSplitAnchorMru: bumpWorkspaceSplitAnchorMru(s.workspaceSplitAnchorMru, anchorId)
+        workspaceSplitAnchorMru: bumpWorkspaceSplitAnchorMru(s.workspaceSplitAnchorMru, anchorId),
+        // Why: adding/swapping a pane must show the grid so the change is seen.
+        workspaceSplitMaximizedPaneId: null
       })
     }
     if (edge === 'replace') {
@@ -149,7 +175,8 @@ export const createWorkspaceSplitViewSlice: StateCreator<
         workspaceSplitLayoutsByAnchor: {
           ...s.workspaceSplitLayoutsByAnchor,
           [anchorId]: removed
-        }
+        },
+        workspaceSplitMaximizedPaneId: null
       })
     } else {
       // Below 2 leaves the association dissolves — the closed pane's project
@@ -160,7 +187,8 @@ export const createWorkspaceSplitViewSlice: StateCreator<
         workspaceSplitLayout: null,
         activeWorkspaceSplitAnchorId: null,
         workspaceSplitLayoutsByAnchor: nextByAnchor,
-        workspaceSplitAnchorMru: s.workspaceSplitAnchorMru.filter((id) => id !== anchorId)
+        workspaceSplitAnchorMru: s.workspaceSplitAnchorMru.filter((id) => id !== anchorId),
+        workspaceSplitMaximizedPaneId: null
       })
     }
     // Why: closing the focused pane must land focus on what remains visible,
@@ -192,7 +220,8 @@ export const createWorkspaceSplitViewSlice: StateCreator<
     if (
       next.workspaceSplitLayout !== s.workspaceSplitLayout ||
       next.workspaceSplitLayoutsByAnchor !== s.workspaceSplitLayoutsByAnchor ||
-      next.activeWorkspaceSplitAnchorId !== s.activeWorkspaceSplitAnchorId
+      next.activeWorkspaceSplitAnchorId !== s.activeWorkspaceSplitAnchorId ||
+      next.workspaceSplitMaximizedPaneId !== s.workspaceSplitMaximizedPaneId
     ) {
       set(next)
     }

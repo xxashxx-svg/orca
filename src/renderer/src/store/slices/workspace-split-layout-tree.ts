@@ -9,13 +9,14 @@ export const WORKSPACE_SPLIT_MAX_RATIO = 0.8
 
 export type WorkspacePaneOpenEdge = 'left' | 'right' | 'up' | 'down' | 'replace'
 
-/** The four split-view store fields, structurally typed so pure helpers can
+/** The split-view store fields, structurally typed so pure helpers can
  *  take either the full AppState or a test fixture. */
 export type WorkspaceSplitStateFields = {
   workspaceSplitLayout: WorkspacePaneNode | null
   workspaceSplitLayoutsByAnchor: Record<string, WorkspacePaneNode>
   activeWorkspaceSplitAnchorId: string | null
   workspaceSplitAnchorMru: string[]
+  workspaceSplitMaximizedPaneId: string | null
 }
 
 export function collectPaneIds(node: WorkspacePaneNode): string[] {
@@ -192,7 +193,8 @@ export function pruneWorkspaceSplitState(
     workspaceSplitLayout: state.workspaceSplitLayout,
     workspaceSplitLayoutsByAnchor: state.workspaceSplitLayoutsByAnchor,
     activeWorkspaceSplitAnchorId: state.activeWorkspaceSplitAnchorId,
-    workspaceSplitAnchorMru: state.workspaceSplitAnchorMru
+    workspaceSplitAnchorMru: state.workspaceSplitAnchorMru,
+    workspaceSplitMaximizedPaneId: state.workspaceSplitMaximizedPaneId
   }
   if (removedWorktreeIds.size === 0) {
     return unchanged
@@ -222,10 +224,15 @@ export function pruneWorkspaceSplitState(
     state.activeWorkspaceSplitAnchorId !== null &&
     Boolean(nextByAnchor[state.activeWorkspaceSplitAnchorId]) &&
     activeLayoutPruned !== null
+  const maximizedSurvives =
+    activeAnchorSurvives &&
+    state.workspaceSplitMaximizedPaneId !== null &&
+    !removedWorktreeIds.has(state.workspaceSplitMaximizedPaneId)
   return {
     workspaceSplitLayout: activeAnchorSurvives ? activeLayoutPruned : null,
     workspaceSplitLayoutsByAnchor: nextByAnchor,
     activeWorkspaceSplitAnchorId: activeAnchorSurvives ? state.activeWorkspaceSplitAnchorId : null,
-    workspaceSplitAnchorMru: nextMru
+    workspaceSplitAnchorMru: nextMru,
+    workspaceSplitMaximizedPaneId: maximizedSurvives ? state.workspaceSplitMaximizedPaneId : null
   }
 }

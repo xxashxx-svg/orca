@@ -10,6 +10,7 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import WorkspacePaneStripControls from './WorkspacePaneStripControls'
 import TabBar from '../tab-bar/TabBar'
 
 import { TabBarQuickCommandsButton } from '../tab-bar/TabBarQuickCommandsButton'
@@ -37,7 +38,7 @@ export default function TabGroupPanel({
   reserveCollapsedSidebarHeaderSpace,
   isTabDragActive = false,
   hoveredTabInsertion = null,
-  workspacePaneClosable = false
+  workspacePaneControls = null
 }: {
   groupId: string
   worktreeId: string
@@ -53,7 +54,7 @@ export default function TabGroupPanel({
   reserveCollapsedSidebarHeaderSpace: boolean
   isTabDragActive?: boolean
   hoveredTabInsertion?: HoveredTabInsertion | null
-  workspacePaneClosable?: boolean
+  workspacePaneControls?: 'grid' | 'maximized' | null
 }): React.JSX.Element {
   const rightSidebarOpen = useAppStore((state) => state.rightSidebarOpen)
   const sidebarOpen = useAppStore((state) => state.sidebarOpen)
@@ -316,32 +317,12 @@ export default function TabGroupPanel({
                 </Tooltip>
               ) : null}
             </div>
-            {workspacePaneClosable ? (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <button
-                    type="button"
-                    aria-label={translate(
-                      'auto.components.tab.group.TabGroupPanel.removeFromSplit',
-                      'Remove from split'
-                    )}
-                    data-workspace-pane-close={worktreeId}
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      useAppStore.getState().closeWorkspacePane(worktreeId)
-                    }}
-                    className={menuButtonClassName}
-                  >
-                    <X className="size-4" />
-                  </button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom" sideOffset={6}>
-                  {translate(
-                    'auto.components.tab.group.TabGroupPanel.removeFromSplitTip',
-                    'Remove from split — keeps the project and its terminals'
-                  )}
-                </TooltipContent>
-              </Tooltip>
+            {workspacePaneControls ? (
+              <WorkspacePaneStripControls
+                worktreeId={worktreeId}
+                mode={workspacePaneControls}
+                buttonClassName={menuButtonClassName}
+              />
             ) : null}
           </div>
           {/* Why: Electron's native drag hit-test ignores z-index — a no-drag

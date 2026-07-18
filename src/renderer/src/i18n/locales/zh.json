@@ -2731,7 +2731,11 @@
             "addSplitPane": "添加拆分窗格",
             "closePaneColumn": "关闭拆分窗格",
             "removeFromSplit": "Remove from split",
-            "removeFromSplitTip": "Remove from split — keeps the project and its terminals"
+            "removeFromSplitTip": "Remove from split — keeps the project and its terminals",
+            "restoreSplit": "Restore split",
+            "maximizePane": "Maximize pane",
+            "restoreSplitTip": "Back to the split grid",
+            "maximizePaneTip": "Show this project full width — the split stays underneath"
           },
           "AiVaultSessionDropLayer": {
             "dropOntoTerminalPane": "拖放到终端面板以恢复此会话。",

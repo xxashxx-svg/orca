@@ -2754,7 +2754,11 @@
             "addSplitPane": "Add split pane",
             "closePaneColumn": "Close split pane",
             "removeFromSplit": "Remove from split",
-            "removeFromSplitTip": "Remove from split — keeps the project and its terminals"
+            "removeFromSplitTip": "Remove from split — keeps the project and its terminals",
+            "restoreSplit": "Restore split",
+            "maximizePane": "Maximize pane",
+            "restoreSplitTip": "Back to the split grid",
+            "maximizePaneTip": "Show this project full width — the split stays underneath"
           },
           "AiVaultSessionDropLayer": {
             "dropOntoTerminalPane": "Drop onto a terminal pane to resume this session.",

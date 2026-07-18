@@ -277,6 +277,7 @@ export const workspaceSessionStateSchema: z.ZodType<WorkspaceSessionState> = z.o
   workspaceSplitLayoutsByAnchorOnShutdown: z.record(z.string(), workspacePaneNodeSchema).optional(),
   activeWorkspaceSplitAnchorOnShutdown: z.string().nullable().optional(),
   workspaceSplitAnchorMruOnShutdown: z.array(z.string()).optional(),
+  workspaceSplitMaximizedPaneOnShutdown: z.string().nullable().optional(),
   openFilesByWorktree: z.record(z.string(), z.array(persistedOpenFileSchema)).optional(),
   activeFileIdByWorktree: z.record(z.string(), z.string().nullable()).optional(),
   markdownFrontmatterVisible: z.record(z.string(), z.boolean()).optional(),

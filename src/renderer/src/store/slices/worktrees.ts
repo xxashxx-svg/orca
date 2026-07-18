@@ -4546,7 +4546,8 @@ export const createWorktreeSlice: StateCreator<AppState, [], [], WorktreeSlice> 
           activePendingCreationId: null,
           // No focused worktree means nothing to show; saved splits survive.
           workspaceSplitLayout: null,
-          activeWorkspaceSplitAnchorId: null
+          activeWorkspaceSplitAnchorId: null,
+          workspaceSplitMaximizedPaneId: null
         }
       }
 
@@ -4572,6 +4573,13 @@ export const createWorktreeSlice: StateCreator<AppState, [], [], WorktreeSlice> 
           nextSplitAnchorId = null
         }
       }
+      // Why: focusing anything other than the maximized pane must bring the
+      // grid (or the new single view) back on screen.
+      const nextSplitMaximizedPaneId =
+        nextSplitAnchorId === s.activeWorkspaceSplitAnchorId &&
+        s.workspaceSplitMaximizedPaneId === worktreeId
+          ? s.workspaceSplitMaximizedPaneId
+          : null
 
       const worktree = findKnownWorktreeById(s, worktreeId)
       shouldClearUnread = Boolean(worktree?.isUnread)
@@ -4781,7 +4789,8 @@ export const createWorktreeSlice: StateCreator<AppState, [], [], WorktreeSlice> 
         nextDetectedWorktrees !== s.detectedWorktreesByRepo ||
         nextSplitLayout !== s.workspaceSplitLayout ||
         nextSplitAnchorId !== s.activeWorkspaceSplitAnchorId ||
-        nextSplitAnchorMru !== s.workspaceSplitAnchorMru
+        nextSplitAnchorMru !== s.workspaceSplitAnchorMru ||
+        nextSplitMaximizedPaneId !== s.workspaceSplitMaximizedPaneId
       if (!hasStateChange) {
         // Why: repeated activation of the already-active worktree can come from
         // clicks, IPC, and automation restore paths. Preserve the root Zustand
@@ -4812,6 +4821,9 @@ export const createWorktreeSlice: StateCreator<AppState, [], [], WorktreeSlice> 
           : {}),
         ...(nextSplitAnchorMru !== s.workspaceSplitAnchorMru
           ? { workspaceSplitAnchorMru: nextSplitAnchorMru }
+          : {}),
+        ...(nextSplitMaximizedPaneId !== s.workspaceSplitMaximizedPaneId
+          ? { workspaceSplitMaximizedPaneId: nextSplitMaximizedPaneId }
           : {}),
         ...tabsByWorktreeUpdate
       }

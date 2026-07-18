@@ -127,7 +127,7 @@ function SplitNode({
   suppressBottomBorder,
   isTabDragActive,
   hoveredTabInsertion,
-  workspacePaneClosable
+  workspacePaneControls
 }: {
   node: TabGroupLayoutNode
   nodePath: string
@@ -144,7 +144,7 @@ function SplitNode({
   suppressBottomBorder: boolean
   isTabDragActive: boolean
   hoveredTabInsertion: HoveredTabInsertion | null
-  workspacePaneClosable: boolean
+  workspacePaneControls: 'grid' | 'maximized' | null
 }): React.JSX.Element {
   const setTabGroupSplitRatio = useAppStore((state) => state.setTabGroupSplitRatio)
   const recordFeatureInteraction = useAppStore((state) => state.recordFeatureInteraction)
@@ -172,9 +172,9 @@ function SplitNode({
         hoveredTabInsertion={
           hoveredTabInsertion?.groupId === node.groupId ? hoveredTabInsertion : null
         }
-        // Why: the send-back chip lives once per workspace pane, in its
+        // Why: the workspace-pane controls live once per pane, in its
         // top-right group's strip next to the native pane controls.
-        workspacePaneClosable={workspacePaneClosable && touchesTopEdge && touchesRightEdge}
+        workspacePaneControls={touchesTopEdge && touchesRightEdge ? workspacePaneControls : null}
       />
     )
   }
@@ -206,7 +206,7 @@ function SplitNode({
           suppressBottomBorder={isHorizontal ? suppressBottomBorder : true}
           isTabDragActive={isTabDragActive}
           hoveredTabInsertion={hoveredTabInsertion}
-          workspacePaneClosable={workspacePaneClosable}
+          workspacePaneControls={workspacePaneControls}
         />
       </div>
       <ResizeHandle
@@ -231,7 +231,7 @@ function SplitNode({
           suppressBottomBorder={suppressBottomBorder}
           isTabDragActive={isTabDragActive}
           hoveredTabInsertion={hoveredTabInsertion}
-          workspacePaneClosable={workspacePaneClosable}
+          workspacePaneControls={workspacePaneControls}
         />
       </div>
     </div>
@@ -243,13 +243,13 @@ export default function TabGroupSplitLayout({
   worktreeId,
   focusedGroupId,
   isWorktreeActive,
-  workspacePaneClosable = false
+  workspacePaneControls = null
 }: {
   layout: TabGroupLayoutNode
   worktreeId: string
   focusedGroupId?: string
   isWorktreeActive: boolean
-  workspacePaneClosable?: boolean
+  workspacePaneControls?: 'grid' | 'maximized' | null
 }): React.JSX.Element {
   const dragSplit = useTabDragSplit({ worktreeId, enabled: isWorktreeActive })
   const hasSplits = layout.type === 'split'
@@ -303,7 +303,7 @@ export default function TabGroupSplitLayout({
               focusedGroupId={focusedGroupId}
               isWorktreeActive={isWorktreeActive}
               hasSplitGroups={hasSplits}
-              workspacePaneClosable={workspacePaneClosable}
+              workspacePaneControls={workspacePaneControls}
               touchesTopEdge={true}
               touchesRightEdge={true}
               touchesLeftEdge={true}

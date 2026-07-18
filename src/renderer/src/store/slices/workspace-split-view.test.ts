@@ -222,6 +222,53 @@ describe('workspace-split-view slice', () => {
     })
   })
 
+  describe('maximize / restore', () => {
+    it('maximizes only members of the active split and focuses the pane', () => {
+      store.getState().openWorkspacePane(WT(2))
+      store.getState().maximizeWorkspacePane(WT(3))
+      expect(store.getState().workspaceSplitMaximizedPaneId).toBeNull()
+      store.getState().maximizeWorkspacePane(WT(2))
+      expect(store.getState().workspaceSplitMaximizedPaneId).toBe(WT(2))
+      expect(store.getState().activeWorktreeId).toBe(WT(2))
+      store.getState().restoreWorkspaceSplitPanes()
+      expect(store.getState().workspaceSplitMaximizedPaneId).toBeNull()
+    })
+
+    it('clicking another member restores the grid', () => {
+      store.getState().openWorkspacePane(WT(2))
+      store.getState().maximizeWorkspacePane(WT(2))
+      store.getState().setActiveWorktree(WT(1))
+      expect(store.getState().workspaceSplitMaximizedPaneId).toBeNull()
+      expect(collectPaneIds(store.getState().workspaceSplitLayout!)).toEqual([WT(1), WT(2)])
+    })
+
+    it('re-clicking the maximized pane keeps it maximized', () => {
+      store.getState().openWorkspacePane(WT(2))
+      store.getState().maximizeWorkspacePane(WT(2))
+      store.getState().setActiveWorktree(WT(2))
+      expect(store.getState().workspaceSplitMaximizedPaneId).toBe(WT(2))
+    })
+
+    it('adding or closing a pane restores the grid', () => {
+      store.getState().openWorkspacePane(WT(2))
+      store.getState().maximizeWorkspacePane(WT(2))
+      store.getState().openWorkspacePane(WT(3))
+      expect(store.getState().workspaceSplitMaximizedPaneId).toBeNull()
+      store.getState().maximizeWorkspacePane(WT(3))
+      store.getState().closeWorkspacePane(WT(3))
+      expect(store.getState().workspaceSplitMaximizedPaneId).toBeNull()
+    })
+
+    it('purging the maximized worktree clears the maximize', () => {
+      store.getState().openWorkspacePane(WT(2))
+      store.getState().openWorkspacePane(WT(3))
+      store.getState().maximizeWorkspacePane(WT(3))
+      store.getState().purgeWorktreeTerminalState([WT(3)])
+      expect(store.getState().workspaceSplitMaximizedPaneId).toBeNull()
+      expect(collectPaneIds(store.getState().workspaceSplitLayout!)).toEqual([WT(1), WT(2)])
+    })
+  })
+
   describe('purge path', () => {
     it('purgeWorktreeTerminalState drops removed panes and collapses', () => {
       store.getState().openWorkspacePane(WT(2))

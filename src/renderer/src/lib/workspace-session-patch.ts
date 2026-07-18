@@ -160,6 +160,9 @@ export function buildWorkspaceSessionPatch(
   if (changed.has('workspaceSplitAnchorMru')) {
     patch.workspaceSplitAnchorMruOnShutdown = snapshot.workspaceSplitAnchorMru
   }
+  if (changed.has('workspaceSplitMaximizedPaneId')) {
+    patch.workspaceSplitMaximizedPaneOnShutdown = snapshot.workspaceSplitMaximizedPaneId
+  }
 
   return patch
 }

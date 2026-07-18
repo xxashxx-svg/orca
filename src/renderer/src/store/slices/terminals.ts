@@ -3417,7 +3417,8 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
           workspaceSplitLayout: null as WorkspacePaneNode | null,
           workspaceSplitLayoutsByAnchor: {} as Record<string, WorkspacePaneNode>,
           activeWorkspaceSplitAnchorId: null as string | null,
-          workspaceSplitAnchorMru: [] as string[]
+          workspaceSplitAnchorMru: [] as string[],
+          workspaceSplitMaximizedPaneId: null as string | null
         }
         if (s.settings?.experimentalSideBySideWorkspaces !== true) {
           return empty
@@ -3448,11 +3449,21 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
           activeWorktreeId &&
           workspaceSplitContainsPane(activeLayout, activeWorktreeId)
         )
+        // Why: a maximized pane only makes sense on the restored active split
+        // and when it still is one of its members.
+        const persistedMaximized = session.workspaceSplitMaximizedPaneOnShutdown ?? null
+        const maximizedUsable = Boolean(
+          activeUsable &&
+          persistedMaximized &&
+          activeLayout &&
+          workspaceSplitContainsPane(activeLayout, persistedMaximized)
+        )
         return {
           workspaceSplitLayout: activeUsable ? activeLayout : null,
           workspaceSplitLayoutsByAnchor: byAnchor,
           activeWorkspaceSplitAnchorId: activeUsable ? persistedActiveAnchor : null,
-          workspaceSplitAnchorMru: mru
+          workspaceSplitAnchorMru: mru,
+          workspaceSplitMaximizedPaneId: maximizedUsable ? persistedMaximized : null
         }
       })()
 

@@ -36,7 +36,8 @@ describe('SESSION_RELEVANT_FIELDS', () => {
     workspaceSplitLayout: true,
     workspaceSplitLayoutsByAnchor: true,
     activeWorkspaceSplitAnchorId: true,
-    workspaceSplitAnchorMru: true
+    workspaceSplitAnchorMru: true,
+    workspaceSplitMaximizedPaneId: true
   }
 
   it('contains every key of WorkspaceSessionSnapshot', () => {

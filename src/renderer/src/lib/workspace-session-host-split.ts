@@ -70,6 +70,7 @@ const FIELD_OWNERSHIP = {
   workspaceSplitLayoutsByAnchorOnShutdown: 'global',
   activeWorkspaceSplitAnchorOnShutdown: 'global',
   workspaceSplitAnchorMruOnShutdown: 'global',
+  workspaceSplitMaximizedPaneOnShutdown: 'global',
   activeWorktreeIdsOnShutdown: 'worktreeArray',
   terminalLayoutsByTabId: 'tabKeyed',
   remoteSessionIdsByTabId: 'tabKeyed',
