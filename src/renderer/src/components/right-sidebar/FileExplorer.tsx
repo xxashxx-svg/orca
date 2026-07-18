@@ -14,6 +14,7 @@ import {
   shouldResetFileExplorerForVisibleWorktree
 } from './file-explorer-reset'
 import { FileExplorerBackgroundMenu } from './FileExplorerBackgroundMenu'
+import { pasteFilesIntoExplorerDirectory } from './file-explorer-clipboard-paste'
 import { FileExplorerNameFilter } from './FileExplorerNameFilter'
 import { FileExplorerQueryStrip } from './FileExplorerQueryStrip'
 import { FileExplorerToolbar } from './FileExplorerToolbar'
@@ -542,6 +543,22 @@ function FileExplorerFiles(): React.JSX.Element {
   )
 
   const handleDuplicate = useFileDuplicate({ activeWorktreeId, worktreePath, refreshDir })
+  const handlePasteFiles = useCallback(
+    (sourcePaths: string[], destinationDir: string) => {
+      if (!activeWorktreeId || !worktreePath) {
+        return
+      }
+      void pasteFilesIntoExplorerDirectory({
+        worktreeId: activeWorktreeId,
+        worktreePath,
+        destinationDir,
+        sourcePaths,
+        refreshDir,
+        setSelectedPath: setSingleSelectedPath
+      })
+    },
+    [activeWorktreeId, worktreePath, refreshDir, setSingleSelectedPath]
+  )
   const handleRowClick = useCallback(
     (node: TreeNode, event: React.MouseEvent<HTMLButtonElement>) =>
       selectRowWithModifiers(node, event, handleClick),
@@ -752,6 +769,7 @@ function FileExplorerFiles(): React.JSX.Element {
                 onContextMenuSelect={preserveSelectionForContextMenu}
                 onCopyPaths={copyPathsForNode}
                 onStartNew={startNew}
+                onPasteFiles={handlePasteFiles}
                 onStartRename={startRename}
                 onDuplicate={handleDuplicate}
                 onAddFolderAsProject={handleAddFolderAsProject}
@@ -800,6 +818,7 @@ function FileExplorerFiles(): React.JSX.Element {
         point={bgMenuPoint}
         worktreePath={worktreePath}
         onStartNew={startNew}
+        onPasteFiles={handlePasteFiles}
       />
     </>
   )

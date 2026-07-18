@@ -34,6 +34,7 @@ type FileExplorerVirtualRowsProps = {
   onContextMenuSelect: (node: TreeNode) => void
   onCopyPaths: (node: TreeNode, pathKind: 'absolute' | 'relative') => void
   onStartNew: (type: 'file' | 'folder', parentPath: string, depth: number) => void
+  onPasteFiles: (sourcePaths: string[], destinationDir: string) => void
   onStartRename: (node: TreeNode) => void
   onDuplicate: (node: TreeNode) => void
   onAddFolderAsProject: (node: TreeNode) => void
@@ -79,6 +80,7 @@ export function FileExplorerVirtualRows(props: FileExplorerVirtualRowsProps): Re
     onContextMenuSelect,
     onCopyPaths,
     onStartNew,
+    onPasteFiles,
     onStartRename,
     onDuplicate,
     onAddFolderAsProject,
@@ -186,6 +188,7 @@ export function FileExplorerVirtualRows(props: FileExplorerVirtualRowsProps): Re
               onContextMenuSelect={() => onContextMenuSelect(n)}
               onCopyPaths={(pathKind) => onCopyPaths(n, pathKind)}
               onStartNew={onStartNew}
+              onPasteFiles={onPasteFiles}
               onStartRename={onStartRename}
               onDuplicate={onDuplicate}
               onAddFolderAsProject={() => onAddFolderAsProject(n)}

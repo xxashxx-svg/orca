@@ -29,6 +29,7 @@ import {
   type ClipboardFileDeps,
   type ClipboardFileResult
 } from './clipboard-file-copy'
+import { readClipboardFilePaths } from './clipboard-file-paste'
 import {
   cleanupExpiredRemoteClipboardFiles,
   writeRemoteFileToClipboard
@@ -71,6 +72,20 @@ function runCommand(command: string, args: string[], stdin?: string): Promise<vo
   })
 }
 
+function runCommandForOutput(command: string, args: string[]): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'ignore'] })
+    const chunks: Buffer[] = []
+    child.stdout?.on('data', (chunk: Buffer) => chunks.push(chunk))
+    child.on('error', reject)
+    child.on('exit', (code) =>
+      code === 0
+        ? resolve(Buffer.concat(chunks).toString('utf8'))
+        : reject(new Error(`${command} exited with ${code}`))
+    )
+  })
+}
+
 export function registerClipboardHandlers(store: Store): void {
   ipcMain.removeHandler('clipboard:readText')
   ipcMain.removeHandler('clipboard:readSelectionText')
@@ -78,6 +93,7 @@ export function registerClipboardHandlers(store: Store): void {
   ipcMain.removeHandler('clipboard:writeSelectionText')
   ipcMain.removeHandler('clipboard:writeImage')
   ipcMain.removeHandler('clipboard:writeFile')
+  ipcMain.removeHandler('clipboard:readFilePaths')
   ipcMain.removeHandler('clipboard:saveImageAsTempFile')
 
   void cleanupExpiredRemoteClipboardFiles()
@@ -140,6 +156,16 @@ export function registerClipboardHandlers(store: Store): void {
       return writeFileToClipboard(request.filePath, deps)
     }
   )
+  // Why: the file-explorer Paste affordance only appears when the OS
+  // clipboard actually holds file references (the inverse of clipboard:writeFile).
+  ipcMain.handle('clipboard:readFilePaths', (event): Promise<string[]> => {
+    assertTrustedClipboardSender(event)
+    return readClipboardFilePaths({
+      platform: process.platform,
+      readBuffer: (format) => clipboard.readBuffer(format),
+      runCommandForOutput
+    })
+  })
   ipcMain.handle('clipboard:writeText', async (event, text: string) => {
     assertTrustedClipboardSender(event)
     return clipboard.writeText(await assertClipboardTextWriteWithinLimitWithYield(text))
