@@ -126,7 +126,8 @@ function SplitNode({
   suppressRightBorder,
   suppressBottomBorder,
   isTabDragActive,
-  hoveredTabInsertion
+  hoveredTabInsertion,
+  workspacePaneClosable
 }: {
   node: TabGroupLayoutNode
   nodePath: string
@@ -143,6 +144,7 @@ function SplitNode({
   suppressBottomBorder: boolean
   isTabDragActive: boolean
   hoveredTabInsertion: HoveredTabInsertion | null
+  workspacePaneClosable: boolean
 }): React.JSX.Element {
   const setTabGroupSplitRatio = useAppStore((state) => state.setTabGroupSplitRatio)
   const recordFeatureInteraction = useAppStore((state) => state.recordFeatureInteraction)
@@ -170,6 +172,9 @@ function SplitNode({
         hoveredTabInsertion={
           hoveredTabInsertion?.groupId === node.groupId ? hoveredTabInsertion : null
         }
+        // Why: the send-back chip lives once per workspace pane, in its
+        // top-right group's strip next to the native pane controls.
+        workspacePaneClosable={workspacePaneClosable && touchesTopEdge && touchesRightEdge}
       />
     )
   }
@@ -201,6 +206,7 @@ function SplitNode({
           suppressBottomBorder={isHorizontal ? suppressBottomBorder : true}
           isTabDragActive={isTabDragActive}
           hoveredTabInsertion={hoveredTabInsertion}
+          workspacePaneClosable={workspacePaneClosable}
         />
       </div>
       <ResizeHandle
@@ -225,6 +231,7 @@ function SplitNode({
           suppressBottomBorder={suppressBottomBorder}
           isTabDragActive={isTabDragActive}
           hoveredTabInsertion={hoveredTabInsertion}
+          workspacePaneClosable={workspacePaneClosable}
         />
       </div>
     </div>
@@ -235,12 +242,14 @@ export default function TabGroupSplitLayout({
   layout,
   worktreeId,
   focusedGroupId,
-  isWorktreeActive
+  isWorktreeActive,
+  workspacePaneClosable = false
 }: {
   layout: TabGroupLayoutNode
   worktreeId: string
   focusedGroupId?: string
   isWorktreeActive: boolean
+  workspacePaneClosable?: boolean
 }): React.JSX.Element {
   const dragSplit = useTabDragSplit({ worktreeId, enabled: isWorktreeActive })
   const hasSplits = layout.type === 'split'
@@ -294,6 +303,7 @@ export default function TabGroupSplitLayout({
               focusedGroupId={focusedGroupId}
               isWorktreeActive={isWorktreeActive}
               hasSplitGroups={hasSplits}
+              workspacePaneClosable={workspacePaneClosable}
               touchesTopEdge={true}
               touchesRightEdge={true}
               touchesLeftEdge={true}

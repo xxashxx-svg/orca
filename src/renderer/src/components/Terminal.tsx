@@ -58,7 +58,6 @@ import TabGroupSplitLayout from './tab-group/TabGroupSplitLayout'
 import AiVaultSessionDropLayer from './tab-group/AiVaultSessionDropLayer'
 import WorkspaceSplitDividers from './workspace-split/WorkspaceSplitDividers'
 import WorkspaceSplitDropOverlay from './workspace-split/WorkspaceSplitDropOverlay'
-import WorkspaceSplitPaneCloseButtons from './workspace-split/WorkspaceSplitPaneCloseButtons'
 import {
   computeWorkspaceSplitGeometry,
   type WorkspacePaneFrame
@@ -2384,15 +2383,10 @@ function Terminal(): React.JSX.Element | null {
               )
             })}
           {workspaceSplitGeometry && activeView === 'terminal' ? (
-            <>
-              <WorkspaceSplitDividers
-                dividers={workspaceSplitGeometry.dividers}
-                containerRef={workspaceSplitContainerRef}
-              />
-              <WorkspaceSplitPaneCloseButtons
-                frameByWorktreeId={workspaceSplitGeometry.frameByWorktreeId}
-              />
-            </>
+            <WorkspaceSplitDividers
+              dividers={workspaceSplitGeometry.dividers}
+              containerRef={workspaceSplitContainerRef}
+            />
           ) : null}
           {sideBySideWorkspacesEnabled ? <WorkspaceSplitDropOverlay /> : null}
         </div>
@@ -2766,6 +2760,7 @@ const WorktreeSplitSurface = React.memo(function WorktreeSplitSurface({
         worktreeId={worktreeId}
         focusedGroupId={focusedGroupId}
         isWorktreeActive={isVisible}
+        workspacePaneClosable={Boolean(isVisible && splitFrame)}
       />
       <TerminalPaneOverlayLayer
         worktreeId={worktreeId}
