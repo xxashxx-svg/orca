@@ -70,6 +70,18 @@ export function resolveSplitPaneDropZone(
   }
 }
 
+/** Whether a viewport point lies inside the workspace body at all — used to
+ *  bound the frame-tracked drop fallback so a release back over the sidebar
+ *  can never commit a stale split zone. */
+export function isPointInsideWorkspaceSplitDropRoot(x: number, y: number): boolean {
+  const root = document.querySelector('[data-workspace-split-drop-root]')
+  if (!(root instanceof HTMLElement)) {
+    return false
+  }
+  const rect = root.getBoundingClientRect()
+  return rect.width > 0 && rectContains(rect, x, y)
+}
+
 /** DOM wrapper: hit-test the workspace body and its visible pane surfaces.
  *  Hidden surfaces report zero-size rects and are skipped. */
 export function getWorkspaceSplitDropTargetFromPoint(

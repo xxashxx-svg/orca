@@ -382,11 +382,13 @@ function Terminal(): React.JSX.Element | null {
     for (const portal of activityTerminalPortals) {
       ids.add(portal.tabId)
     }
-    // Why: with side-by-side panes every visible pane's group-active terminals
-    // are on screen; hibernation must not treat them as background.
+    // Why: with side-by-side panes every VISIBLE pane's group-active terminals
+    // are on screen; hibernation must not treat them as background. Members
+    // hidden by a maximize are deliberately excluded — they background
+    // normally until restored.
     if (workspaceSplitLayout && activeView === 'terminal') {
       const unifiedTabsByWorktree = useAppStore.getState().unifiedTabsByWorktree
-      for (const paneId of collectPaneIds(workspaceSplitLayout)) {
+      for (const paneId of visiblePaneIdSet) {
         const unifiedTabById = new Map(
           (unifiedTabsByWorktree[paneId] ?? []).map((unifiedTab) => [unifiedTab.id, unifiedTab])
         )
@@ -405,6 +407,7 @@ function Terminal(): React.JSX.Element | null {
     activeView,
     activityTerminalPortals,
     groupsByWorktree,
+    visiblePaneIdSet,
     workspaceSplitLayout
   ])
 
@@ -2738,8 +2741,20 @@ const WorktreeSplitSurface = React.memo(function WorktreeSplitSurface({
   // Why: with side-by-side panes, focus lives on the pane the user last
   // touched. Capture-phase so promotion lands before TabGroupPanel.focusGroup,
   // keeping every existing activeWorktreeId guard correct.
-  const promoteSplitPaneFocus = (): void => {
+  const promoteSplitPaneFocus = (event: React.SyntheticEvent): void => {
     if (!isVisible || !workspacePaneControls) {
+      return
+    }
+    // Why: clicking a pane-control button (close/maximize) must not first
+    // promote this pane — closing an unfocused pane would otherwise bounce
+    // focus to an arbitrary survivor instead of leaving it where it was.
+    const target = event.target
+    if (
+      target instanceof HTMLElement &&
+      target.closest(
+        '[data-workspace-pane-close], [data-workspace-pane-maximize], [data-workspace-pane-restore]'
+      )
+    ) {
       return
     }
     const state = useAppStore.getState()
@@ -2786,6 +2801,10 @@ const WorktreeSplitSurface = React.memo(function WorktreeSplitSurface({
         focusedGroupId={focusedGroupId}
         isWorktreeActive={isVisible}
         workspacePaneControls={isVisible ? (workspacePaneControls ?? null) : null}
+        // Why: chrome overlays live at the WINDOW edges — only the outermost
+        // panes of a split reserve strip space for them.
+        reserveWindowLeftChrome={!splitFrame || splitFrame.left <= 0.1}
+        reserveWindowRightChrome={!splitFrame || splitFrame.left + splitFrame.width >= 99.9}
       />
       <TerminalPaneOverlayLayer
         worktreeId={worktreeId}

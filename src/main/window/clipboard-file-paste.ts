@@ -49,12 +49,15 @@ export async function readClipboardFilePaths(deps: ClipboardPasteDeps): Promise<
   try {
     if (deps.platform === 'win32') {
       // Get-Clipboard -Format FileDropList reads CF_HDROP — the same format
-      // Explorer and our own Copy write. One path per line.
+      // Explorer and our own Copy write. One path per line. The OutputEncoding
+      // override is required: PowerShell 5.1 writes redirected stdout in the
+      // OEM code page, which mojibakes any non-ASCII filename before it
+      // reaches our UTF-8 decode.
       const output = await deps.runCommandForOutput('powershell.exe', [
         '-NoProfile',
         '-NonInteractive',
         '-Command',
-        '(Get-Clipboard -Format FileDropList | ForEach-Object { $_.FullName }) -join "`n"'
+        '[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); (Get-Clipboard -Format FileDropList | ForEach-Object { $_.FullName }) -join "`n"'
       ])
       return dedupeAbsolute(output.split(/\r?\n/).map((line) => line.trim()))
     }

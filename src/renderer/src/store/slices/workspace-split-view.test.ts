@@ -274,13 +274,58 @@ describe('workspace-split-view slice', () => {
       expect(store.getState().workspaceSplitMaximizedPaneId).toBeNull()
     })
 
-    it('purging the maximized worktree clears the maximize', () => {
+    it('purging the maximized (focused) worktree clears the maximize and view', () => {
       store.getState().openWorkspacePane(WT(2))
       store.getState().openWorkspacePane(WT(3))
       store.getState().maximizeWorkspacePane(WT(3))
       store.getState().purgeWorktreeTerminalState([WT(3)])
       expect(store.getState().workspaceSplitMaximizedPaneId).toBeNull()
+      // Purging the focused pane clears the on-screen split (no focused pane
+      // may render); the pruned {1,2} pairing stays saved and restorable.
+      expect(store.getState().workspaceSplitLayout).toBeNull()
+      store.getState().setActiveWorktree(WT(1))
       expect(collectPaneIds(store.getState().workspaceSplitLayout!)).toEqual([WT(1), WT(2)])
+    })
+  })
+
+  describe('anchor-key integrity', () => {
+    it('closing the anchor pane re-keys the split so a new pairing cannot clobber it', () => {
+      store.getState().openWorkspacePane(WT(2))
+      store.getState().openWorkspacePane(WT(3))
+      // Close the anchor (WT1) itself — focus hands to a survivor and the
+      // {3,2} split must re-key away from WT1.
+      store.getState().closeWorkspacePane(WT(1))
+      expect(store.getState().activeWorktreeId).toBe(WT(3))
+      store.getState().setActiveWorktree(WT(4))
+      // Standalone on WT1 again, mint a fresh pairing under WT1's id.
+      store.getState().setActiveWorktree(WT(1))
+      expect(store.getState().workspaceSplitLayout).toBeNull()
+      store.getState().openWorkspacePane(WT(5))
+      // The unrelated {3,2} association must have survived under its new key.
+      store.getState().setActiveWorktree(WT(2))
+      expect(collectPaneIds(store.getState().workspaceSplitLayout!)).toEqual([WT(3), WT(2)])
+    })
+
+    it('replace-edge on the anchor pane re-keys instead of leaving a stale key', () => {
+      store.getState().openWorkspacePane(WT(2))
+      store.getState().openWorkspacePane(WT(3), { targetWorktreeId: WT(1), edge: 'replace' })
+      const anchors = Object.keys(store.getState().workspaceSplitLayoutsByAnchor)
+      expect(anchors).toHaveLength(1)
+      const layout = store.getState().workspaceSplitLayoutsByAnchor[anchors[0]]
+      expect(collectPaneIds(layout)).toContain(anchors[0])
+    })
+  })
+
+  describe('emptied non-focused pane', () => {
+    it('closes the pane even when it is not the focused one', () => {
+      store.getState().openWorkspacePane(WT(2))
+      store.getState().setActiveWorktree(WT(2))
+      const tab = store.getState().createUnifiedTab(WT(2), 'editor')
+      // Focus moves back to WT(1); the WT(2) pane then empties in background.
+      store.getState().setActiveWorktree(WT(1))
+      store.getState().closeUnifiedTab(tab.id)
+      expect(store.getState().workspaceSplitLayout).toBeNull()
+      expect(store.getState().activeWorktreeId).toBe(WT(1))
     })
   })
 
@@ -289,6 +334,18 @@ describe('workspace-split-view slice', () => {
       store.getState().openWorkspacePane(WT(2))
       store.getState().purgeWorktreeTerminalState([WT(2)])
       expect(store.getState().workspaceSplitLayout).toBeNull()
+    })
+
+    it('purging the focused pane clears the on-screen split but keeps saved survivors', () => {
+      store.getState().openWorkspacePane(WT(2))
+      store.getState().openWorkspacePane(WT(3))
+      store.getState().purgeWorktreeTerminalState([WT(1)])
+      expect(store.getState().activeWorktreeId).toBeNull()
+      expect(store.getState().workspaceSplitLayout).toBeNull()
+      expect(store.getState().activeWorkspaceSplitAnchorId).toBeNull()
+      // The surviving {3,2} pairing is still saved and restorable.
+      store.getState().setActiveWorktree(WT(2))
+      expect(collectPaneIds(store.getState().workspaceSplitLayout!)).toEqual([WT(3), WT(2)])
     })
 
     it('keeps unrelated splits intact on purge', () => {

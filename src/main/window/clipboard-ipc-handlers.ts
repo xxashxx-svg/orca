@@ -74,11 +74,15 @@ function runCommand(command: string, args: string[], stdin?: string): Promise<vo
 
 function runCommandForOutput(command: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'ignore'] })
+    // Why windowsHide: this runs on every explorer context-menu open; without
+    // it some Node/Electron builds flash a console window per right-click.
+    const child = spawn(command, args, { stdio: ['ignore', 'pipe', 'ignore'], windowsHide: true })
     const chunks: Buffer[] = []
     child.stdout?.on('data', (chunk: Buffer) => chunks.push(chunk))
     child.on('error', reject)
-    child.on('exit', (code) =>
+    // Why 'close' not 'exit': stdout can still be flushing at 'exit'; 'close'
+    // guarantees the last chunks arrived before we decode.
+    child.on('close', (code) =>
       code === 0
         ? resolve(Buffer.concat(chunks).toString('utf8'))
         : reject(new Error(`${command} exited with ${code}`))

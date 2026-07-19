@@ -2280,6 +2280,16 @@ function buildWorktreePurgeState(s: AppState, worktreeIds: string[]): Partial<Ap
     // Why: side-by-side panes (active AND saved) must never point at removed
     // worktrees; this runs regardless of the experimental flag.
     ...pruneWorkspaceSplitState(s, worktreeIdSet),
+    // Why: purging the focused worktree nulls activeWorktreeId below, and a
+    // visible split with no focused pane is an invalid state — clear the
+    // on-screen split too; the pruned saved pairings survive for later.
+    ...(removedActive
+      ? {
+          workspaceSplitLayout: null,
+          activeWorkspaceSplitAnchorId: null,
+          workspaceSplitMaximizedPaneId: null
+        }
+      : {}),
     activeWorkspaceKey: (() => {
       if (s.activeWorkspaceKey && worktreeIdSet.has(s.activeWorkspaceKey)) {
         return null
@@ -4553,11 +4563,18 @@ export const createWorktreeSlice: StateCreator<AppState, [], [], WorktreeSlice> 
 
       // Why: splits are project associations. Activating a member of a saved
       // split restores that split; activating anything else shows it alone,
-      // leaving the current split behind intact for its own members.
-      let nextSplitLayout = s.workspaceSplitLayout
-      let nextSplitAnchorId = s.activeWorkspaceSplitAnchorId
+      // leaving the current split behind intact for its own members. With the
+      // flag off, activation clears any residual on-screen split immediately
+      // (saved pairings stay dormant until the flag returns) — otherwise the
+      // restore below would resurrect the feature until an app restart.
+      const splitFlagEnabled = s.settings?.experimentalSideBySideWorkspaces === true
+      let nextSplitLayout = splitFlagEnabled ? s.workspaceSplitLayout : null
+      let nextSplitAnchorId = splitFlagEnabled ? s.activeWorkspaceSplitAnchorId : null
       let nextSplitAnchorMru = s.workspaceSplitAnchorMru
-      if (!nextSplitLayout || !workspaceSplitContainsPane(nextSplitLayout, worktreeId)) {
+      if (
+        splitFlagEnabled &&
+        (!nextSplitLayout || !workspaceSplitContainsPane(nextSplitLayout, worktreeId))
+      ) {
         const savedAnchorId = findWorkspaceSplitAnchorForWorktree(s, worktreeId)
         if (savedAnchorId) {
           nextSplitLayout = s.workspaceSplitLayoutsByAnchor[savedAnchorId] ?? null

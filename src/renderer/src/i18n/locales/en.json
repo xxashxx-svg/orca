@@ -10389,7 +10389,8 @@
             }
           },
           "fileExplorerClipboardPaste": {
-            "failed": "Failed to paste {{value0}} {{value1}}."
+            "failed": "Failed to paste {{value0}} {{value1}}.",
+            "skipped": "Skipped {{value0}} {{value1}}."
           }
         }
       },

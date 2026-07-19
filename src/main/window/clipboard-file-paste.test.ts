@@ -28,6 +28,17 @@ describe('readClipboardFilePaths', () => {
     expect(await readClipboardFilePaths(deps)).toEqual(['C:\\a\\one.txt', 'C:\\a\\two.txt'])
   })
 
+  it('forces UTF-8 stdout so non-ASCII Windows paths survive, and parses them', async () => {
+    const runCommandForOutput = vi.fn(async (_cmd: string, args: string[]) => {
+      // Why: PowerShell 5.1 defaults redirected stdout to the OEM code page;
+      // without the override every non-ASCII filename mojibakes.
+      expect(args.join(' ')).toContain('[Console]::OutputEncoding')
+      return 'C:\\docs\\résumé 简历.txt\r\n'
+    })
+    const deps = makeDeps({ platform: 'win32', runCommandForOutput })
+    expect(await readClipboardFilePaths(deps)).toEqual(['C:\\docs\\résumé 简历.txt'])
+  })
+
   it('returns empty when the Windows clipboard has no file drop', async () => {
     const deps = makeDeps({ platform: 'win32', runCommandForOutput: vi.fn(async () => '\r\n') })
     expect(await readClipboardFilePaths(deps)).toEqual([])

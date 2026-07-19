@@ -7,6 +7,7 @@ import {
   bumpWorkspaceSplitAnchorMru,
   clampWorkspaceSplitRatio,
   collectPaneIds,
+  normalizeWorkspaceSplitAnchorKeys,
   pruneWorkspaceSplitState,
   removeWorkspacePaneLeaves,
   removeWorktreesFromOtherWorkspaceSplits,
@@ -129,11 +130,18 @@ export const createWorkspaceSplitViewSlice: StateCreator<
         anchorId,
         collectPaneIds(next)
       )
+      // Why: a replace-edge can swap the anchor pane itself out; re-key so a
+      // future split minted under that worktree's id can't clobber this one.
+      const normalized = normalizeWorkspaceSplitAnchorKeys({
+        byAnchor: { ...exclusive.byAnchor, [anchorId]: next },
+        mru: bumpWorkspaceSplitAnchorMru(exclusive.mru, anchorId),
+        activeAnchorId: anchorId
+      })
       set({
         workspaceSplitLayout: next,
-        activeWorkspaceSplitAnchorId: anchorId,
-        workspaceSplitLayoutsByAnchor: { ...exclusive.byAnchor, [anchorId]: next },
-        workspaceSplitAnchorMru: bumpWorkspaceSplitAnchorMru(exclusive.mru, anchorId),
+        activeWorkspaceSplitAnchorId: normalized.activeAnchorId,
+        workspaceSplitLayoutsByAnchor: normalized.byAnchor,
+        workspaceSplitAnchorMru: normalized.mru,
         // Why: adding/swapping a pane must show the grid so the change is seen.
         workspaceSplitMaximizedPaneId: null
       })
@@ -176,12 +184,18 @@ export const createWorkspaceSplitViewSlice: StateCreator<
     const removed = removeWorkspacePaneLeaves(layout, new Set([worktreeId]))
     const survivorIds = removed ? collectPaneIds(removed) : []
     if (removed && removed.type === 'split') {
+      // Why: closing the anchor's own pane leaves a stale key that a future
+      // split minted under that id would clobber; re-key to a surviving leaf.
+      const normalized = normalizeWorkspaceSplitAnchorKeys({
+        byAnchor: { ...s.workspaceSplitLayoutsByAnchor, [anchorId]: removed },
+        mru: s.workspaceSplitAnchorMru,
+        activeAnchorId: anchorId
+      })
       set({
         workspaceSplitLayout: removed,
-        workspaceSplitLayoutsByAnchor: {
-          ...s.workspaceSplitLayoutsByAnchor,
-          [anchorId]: removed
-        },
+        activeWorkspaceSplitAnchorId: normalized.activeAnchorId,
+        workspaceSplitLayoutsByAnchor: normalized.byAnchor,
+        workspaceSplitAnchorMru: normalized.mru,
         workspaceSplitMaximizedPaneId: null
       })
     } else {
@@ -227,6 +241,7 @@ export const createWorkspaceSplitViewSlice: StateCreator<
       next.workspaceSplitLayout !== s.workspaceSplitLayout ||
       next.workspaceSplitLayoutsByAnchor !== s.workspaceSplitLayoutsByAnchor ||
       next.activeWorkspaceSplitAnchorId !== s.activeWorkspaceSplitAnchorId ||
+      next.workspaceSplitAnchorMru !== s.workspaceSplitAnchorMru ||
       next.workspaceSplitMaximizedPaneId !== s.workspaceSplitMaximizedPaneId
     ) {
       set(next)

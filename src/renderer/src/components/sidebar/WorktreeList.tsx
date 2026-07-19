@@ -172,6 +172,7 @@ import {
 } from './workspace-kanban-card-pointer-drag-dom'
 import {
   getWorkspaceSplitDropTargetFromPoint,
+  isPointInsideWorkspaceSplitDropRoot,
   type WorkspaceSplitDropZone
 } from '../workspace-split/split-pane-drop-target'
 import { updateWorkspaceSplitDropHighlight } from '../workspace-split/workspace-split-drop-visual'
@@ -282,7 +283,11 @@ import { buildSidebarHostOptions } from './sidebar-host-options'
 import { HostSectionHeaderMenu } from './HostSectionHeaderMenu'
 import { ProjectHeaderActions } from './ProjectHeaderActions'
 import { translate } from '@/i18n/i18n'
-import { folderWorkspaceKey, getActiveSidebarWorkspaceId } from '../../../../shared/workspace-scope'
+import {
+  folderWorkspaceKey,
+  getActiveSidebarWorkspaceId,
+  parseWorkspaceKey
+} from '../../../../shared/workspace-scope'
 import { getHostDisplayLabelOverrides } from '../../../../shared/host-setting-overrides'
 import {
   isConfirmedStaleFolderPathStatus,
@@ -2850,6 +2855,9 @@ const VirtualizedWorktreeViewport = React.memo(function VirtualizedWorktreeViewp
     // inside an already-open board still always belong to the board.
     const splitDropEligible =
       drag.draggedIds.length === 1 &&
+      // Why: folder workspaces cannot become split panes; showing the drop
+      // highlight for them would be a lying affordance.
+      parseWorkspaceKey(drag.draggedIds[0])?.type !== 'folder' &&
       useAppStore.getState().settings?.experimentalSideBySideWorkspaces === true
     // Why: reveal the companion board preview the moment a card drag begins so the
     // user sees the drop target on the right and can choose whether to aim for it,
@@ -3300,7 +3308,11 @@ const VirtualizedWorktreeViewport = React.memo(function VirtualizedWorktreeViewp
       } else if (
         drag.latestSplitPaneDropTarget &&
         drag.draggedIds.length === 1 &&
-        !isWorkspaceKanbanSidebarDropPointInBoard(event.clientX, event.clientY)
+        !isWorkspaceKanbanSidebarDropPointInBoard(event.clientX, event.clientY) &&
+        // Why: the frame-tracked zone only backstops a release that landed
+        // between panes INSIDE the workspace body; a release back over the
+        // sidebar must fall through to the sidebar drop branches.
+        isPointInsideWorkspaceSplitDropRoot(event.clientX, event.clientY)
       ) {
         // Why: prefer the release point; the frame-tracked zone covers a
         // pointer-up that landed a few px outside the last hit-tested rect.

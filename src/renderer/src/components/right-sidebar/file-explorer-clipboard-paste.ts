@@ -49,6 +49,7 @@ export async function pasteFilesIntoExplorerDirectory({
     )
     await refreshDir(destinationDir)
     const imported = results.filter((result) => result.status === 'imported')
+    const skipped = results.filter((result) => result.status === 'skipped')
     const failed = results.filter((result) => result.status === 'failed')
     if (imported.length > 0) {
       setSelectedPath(imported[0].destPath)
@@ -60,6 +61,17 @@ export async function pasteFilesIntoExplorerDirectory({
           'auto.components.right.sidebar.fileExplorerClipboardPaste.failed',
           'Failed to paste {{value0}} {{value1}}.',
           { value0: failed.length, value1: noun }
+        )
+      )
+    } else if (skipped.length > 0 && imported.length === 0) {
+      // Why: skips are how the pipeline reports missing sources and symlinks;
+      // an all-skipped paste must not look like a silent success.
+      const noun = skipped.length === 1 ? 'file' : 'files'
+      toast.error(
+        translate(
+          'auto.components.right.sidebar.fileExplorerClipboardPaste.skipped',
+          'Skipped {{value0}} {{value1}}.',
+          { value0: skipped.length, value1: noun }
         )
       )
     }

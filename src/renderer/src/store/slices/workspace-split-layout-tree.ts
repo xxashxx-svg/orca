@@ -205,6 +205,42 @@ export function removeWorktreesFromOtherWorkspaceSplits(
   return { byAnchor: nextByAnchor, mru: mru.filter((anchorId) => nextByAnchor[anchorId]) }
 }
 
+/** An anchor key must reference a member of its own layout — otherwise a
+ *  later split minted under that worktree's id would silently overwrite an
+ *  unrelated association. Re-keys stale entries to their first leaf (which,
+ *  under exclusive membership, can never collide with another live key). */
+export function normalizeWorkspaceSplitAnchorKeys(state: {
+  byAnchor: Record<string, WorkspacePaneNode>
+  mru: readonly string[]
+  activeAnchorId: string | null
+}): { byAnchor: Record<string, WorkspacePaneNode>; mru: string[]; activeAnchorId: string | null } {
+  const keyMap = new Map<string, string>()
+  const nextByAnchor: Record<string, WorkspacePaneNode> = {}
+  for (const [anchorId, layout] of Object.entries(state.byAnchor)) {
+    const leaves = collectPaneIds(layout)
+    const nextKey = leaves.includes(anchorId) ? anchorId : (leaves[0] ?? anchorId)
+    // On the impossible collision (exclusivity violated), keep the old key
+    // rather than clobbering another entry.
+    const finalKey = nextKey !== anchorId && nextByAnchor[nextKey] ? anchorId : nextKey
+    keyMap.set(anchorId, finalKey)
+    nextByAnchor[finalKey] = layout
+  }
+  const seen = new Set<string>()
+  const nextMru: string[] = []
+  for (const anchorId of state.mru) {
+    const mapped = keyMap.get(anchorId)
+    if (mapped && nextByAnchor[mapped] && !seen.has(mapped)) {
+      seen.add(mapped)
+      nextMru.push(mapped)
+    }
+  }
+  return {
+    byAnchor: nextByAnchor,
+    mru: nextMru,
+    activeAnchorId: state.activeAnchorId ? (keyMap.get(state.activeAnchorId) ?? null) : null
+  }
+}
+
 /** Hydration sweep for sessions written before exclusive membership: keeps
  *  each worktree's most recently shown split and prunes it from the rest. */
 export function enforceExclusiveWorkspaceSplitMembership(
@@ -241,22 +277,29 @@ export function enforceExclusiveWorkspaceSplitMembership(
  *  so callers can spread it into a wider store patch safely; per-field
  *  references are preserved when untouched. */
 export function pruneWorkspaceSplitState(
-  state: WorkspaceSplitStateFields,
+  state: Partial<WorkspaceSplitStateFields>,
   removedWorktreeIds: ReadonlySet<string>
 ): WorkspaceSplitStateFields {
+  // Why: buildWorktreePurgeState's contract tolerates partial state — some
+  // worktree-isolation test callers construct stores without this slice.
+  const currentLayout = state.workspaceSplitLayout ?? null
+  const currentByAnchor = state.workspaceSplitLayoutsByAnchor ?? {}
+  const currentAnchorId = state.activeWorkspaceSplitAnchorId ?? null
+  const currentMru = state.workspaceSplitAnchorMru ?? []
+  const currentMaximized = state.workspaceSplitMaximizedPaneId ?? null
   const unchanged: WorkspaceSplitStateFields = {
-    workspaceSplitLayout: state.workspaceSplitLayout,
-    workspaceSplitLayoutsByAnchor: state.workspaceSplitLayoutsByAnchor,
-    activeWorkspaceSplitAnchorId: state.activeWorkspaceSplitAnchorId,
-    workspaceSplitAnchorMru: state.workspaceSplitAnchorMru,
-    workspaceSplitMaximizedPaneId: state.workspaceSplitMaximizedPaneId
+    workspaceSplitLayout: currentLayout,
+    workspaceSplitLayoutsByAnchor: currentByAnchor,
+    activeWorkspaceSplitAnchorId: currentAnchorId,
+    workspaceSplitAnchorMru: currentMru,
+    workspaceSplitMaximizedPaneId: currentMaximized
   }
   if (removedWorktreeIds.size === 0) {
     return unchanged
   }
   let mapChanged = false
   const nextByAnchor: Record<string, WorkspacePaneNode> = {}
-  for (const [anchorId, layout] of Object.entries(state.workspaceSplitLayoutsByAnchor)) {
+  for (const [anchorId, layout] of Object.entries(currentByAnchor)) {
     const pruned = pruneWorkspaceSplitLayout(layout, removedWorktreeIds)
     if (pruned === layout) {
       nextByAnchor[anchorId] = layout
@@ -267,27 +310,27 @@ export function pruneWorkspaceSplitState(
       nextByAnchor[anchorId] = pruned
     }
   }
-  const activeLayoutPruned = pruneWorkspaceSplitLayout(
-    state.workspaceSplitLayout,
-    removedWorktreeIds
-  )
-  if (!mapChanged && activeLayoutPruned === state.workspaceSplitLayout) {
+  const activeLayoutPruned = pruneWorkspaceSplitLayout(currentLayout, removedWorktreeIds)
+  if (!mapChanged && activeLayoutPruned === currentLayout) {
     return unchanged
   }
-  const nextMru = state.workspaceSplitAnchorMru.filter((anchorId) => nextByAnchor[anchorId])
+  const nextMru = currentMru.filter((anchorId) => nextByAnchor[anchorId])
   const activeAnchorSurvives =
-    state.activeWorkspaceSplitAnchorId !== null &&
-    Boolean(nextByAnchor[state.activeWorkspaceSplitAnchorId]) &&
+    currentAnchorId !== null &&
+    Boolean(nextByAnchor[currentAnchorId]) &&
     activeLayoutPruned !== null
   const maximizedSurvives =
-    activeAnchorSurvives &&
-    state.workspaceSplitMaximizedPaneId !== null &&
-    !removedWorktreeIds.has(state.workspaceSplitMaximizedPaneId)
+    activeAnchorSurvives && currentMaximized !== null && !removedWorktreeIds.has(currentMaximized)
+  const normalized = normalizeWorkspaceSplitAnchorKeys({
+    byAnchor: nextByAnchor,
+    mru: nextMru,
+    activeAnchorId: activeAnchorSurvives ? currentAnchorId : null
+  })
   return {
     workspaceSplitLayout: activeAnchorSurvives ? activeLayoutPruned : null,
-    workspaceSplitLayoutsByAnchor: nextByAnchor,
-    activeWorkspaceSplitAnchorId: activeAnchorSurvives ? state.activeWorkspaceSplitAnchorId : null,
-    workspaceSplitAnchorMru: nextMru,
-    workspaceSplitMaximizedPaneId: maximizedSurvives ? state.workspaceSplitMaximizedPaneId : null
+    workspaceSplitLayoutsByAnchor: normalized.byAnchor,
+    activeWorkspaceSplitAnchorId: normalized.activeAnchorId,
+    workspaceSplitAnchorMru: normalized.mru,
+    workspaceSplitMaximizedPaneId: maximizedSurvives ? currentMaximized : null
   }
 }

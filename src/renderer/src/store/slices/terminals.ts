@@ -38,6 +38,7 @@ import { isValidHostTerminalTabId, isValidTerminalTabId } from '../../../../shar
 import {
   collectPaneIds,
   enforceExclusiveWorkspaceSplitMembership,
+  normalizeWorkspaceSplitAnchorKeys,
   pruneWorkspaceSplitLayout,
   workspaceSplitContainsPane
 } from './workspace-split-view'
@@ -3428,13 +3429,25 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
         const persistedMap =
           session.workspaceSplitLayoutsByAnchorOnShutdown ??
           (legacyLayout ? { [collectPaneIds(legacyLayout)[0]]: legacyLayout } : {})
+        // Why: SSH worktrees are synthesized as placeholders above and never
+        // reach validWorktreeIds; a split leaf is restorable when either side
+        // knows it, otherwise every SSH pairing would dissolve on restart.
+        const splitRestorableWorktreeIds = new Set(validWorktreeIds)
+        for (const repoWorktrees of Object.values(worktreesByRepo)) {
+          for (const worktree of repoWorktrees) {
+            splitRestorableWorktreeIds.add(worktree.id)
+          }
+        }
         const byAnchor: Record<string, WorkspacePaneNode> = {}
         for (const [anchorId, layout] of Object.entries(persistedMap)) {
           const staleLeafIds = new Set(
-            collectPaneIds(layout).filter((paneId) => !validWorktreeIds.has(paneId))
+            collectPaneIds(layout).filter((paneId) => !splitRestorableWorktreeIds.has(paneId))
           )
           const pruned = pruneWorkspaceSplitLayout(layout, staleLeafIds)
-          if (pruned) {
+          // Why: require a real split — a degenerate single-pane entry from a
+          // corrupted session would otherwise claim its worktree in the
+          // exclusivity sweep and dissolve a legitimate pairing behind it.
+          if (pruned && pruned.type === 'split') {
             byAnchor[anchorId] = pruned
           }
         }
@@ -3442,12 +3455,18 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
           (anchorId) => byAnchor[anchorId]
         )
         // Why: sessions written before exclusive membership can hold the same
-        // project in several splits; keep its most recent pairing only.
-        const { byAnchor: exclusiveByAnchor, mru } = enforceExclusiveWorkspaceSplitMembership(
-          byAnchor,
-          rawMru
-        )
-        const persistedActiveAnchor = session.activeWorkspaceSplitAnchorOnShutdown ?? mru[0] ?? null
+        // project in several splits; keep its most recent pairing only. Older
+        // sessions can also carry stale anchor keys — re-key them so a future
+        // split can never clobber a surviving association.
+        const swept = enforceExclusiveWorkspaceSplitMembership(byAnchor, rawMru)
+        const normalizedKeys = normalizeWorkspaceSplitAnchorKeys({
+          byAnchor: swept.byAnchor,
+          mru: swept.mru,
+          activeAnchorId: session.activeWorkspaceSplitAnchorOnShutdown ?? swept.mru[0] ?? null
+        })
+        const exclusiveByAnchor = normalizedKeys.byAnchor
+        const mru = normalizedKeys.mru
+        const persistedActiveAnchor = normalizedKeys.activeAnchorId
         const activeLayout = persistedActiveAnchor
           ? (exclusiveByAnchor[persistedActiveAnchor] ?? null)
           : null

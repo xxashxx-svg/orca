@@ -1039,19 +1039,24 @@ export const createTabsSlice: StateCreator<AppState, [], [], TabsSlice> = (set, 
       }
     })
 
-    // Why: an emptied side-by-side pane closes and hands focus to a surviving
-    // pane instead of dropping the whole workspace to the landing screen.
+    // Why: an emptied side-by-side pane closes (focused or not) instead of
+    // lingering blank; when it was the focused one, focus lands on a survivor
+    // rather than the landing screen.
     const afterClose = get()
-    if (
-      afterClose.activeWorktreeId === null &&
-      workspaceSplitContainsPane(afterClose.workspaceSplitLayout, worktreeId)
-    ) {
-      const survivor = collectPaneIds(afterClose.workspaceSplitLayout!).find(
-        (paneId) => paneId !== worktreeId
-      )
-      afterClose.removeWorktreesFromSplitView([worktreeId])
-      if (survivor) {
-        get().setActiveWorktree(survivor)
+    if (workspaceSplitContainsPane(afterClose.workspaceSplitLayout, worktreeId)) {
+      const paneEmptied =
+        (afterClose.unifiedTabsByWorktree[worktreeId] ?? []).length === 0 &&
+        (afterClose.tabsByWorktree[worktreeId] ?? []).length === 0 &&
+        (afterClose.browserTabsByWorktree[worktreeId] ?? []).length === 0 &&
+        !afterClose.openFiles.some((file) => file.worktreeId === worktreeId)
+      if (paneEmptied) {
+        const survivor = collectPaneIds(afterClose.workspaceSplitLayout!).find(
+          (paneId) => paneId !== worktreeId
+        )
+        afterClose.closeWorkspacePane(worktreeId)
+        if (get().activeWorktreeId === null && survivor) {
+          get().setActiveWorktree(survivor)
+        }
       }
     }
 

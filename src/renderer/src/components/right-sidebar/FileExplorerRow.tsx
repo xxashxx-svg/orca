@@ -496,15 +496,23 @@ export function FileExplorerRow({
   // Why: probed on menu open — Paste only appears when the OS clipboard
   // actually holds file references, mirroring Explorer/Finder.
   const [pastablePaths, setPastablePaths] = useState<string[]>([])
+  // Why: the probe spawns a process on Windows; a slow result from a menu the
+  // user already closed must not resurface stale paths on the next open.
+  const pasteProbeGenerationRef = useRef(0)
 
   return (
     <ContextMenu
       onOpenChange={(open) => {
+        const probeGeneration = ++pasteProbeGenerationRef.current
         if (!open) {
           setPastablePaths([])
           return
         }
-        void getPastableClipboardFilePaths().then(setPastablePaths)
+        void getPastableClipboardFilePaths().then((paths) => {
+          if (pasteProbeGenerationRef.current === probeGeneration) {
+            setPastablePaths(paths)
+          }
+        })
         window.dispatchEvent(new Event(CLOSE_ALL_CONTEXT_MENUS_EVENT))
         onContextMenuSelect()
       }}
