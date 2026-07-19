@@ -8,7 +8,10 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { translate } from '@/i18n/i18n'
-import { getPastableClipboardFilePaths } from './file-explorer-clipboard-paste'
+import {
+  getCachedPastableClipboardFilePaths,
+  getPastableClipboardFilePaths
+} from './file-explorer-clipboard-paste'
 
 function stopRightButtonMenuSelection(event: React.PointerEvent): void {
   if (event.button !== 2) {
@@ -42,13 +45,15 @@ export function FileExplorerBackgroundMenu({
     return () => window.removeEventListener(CLOSE_ALL_CONTEXT_MENUS_EVENT, close)
   }, [onOpenChange])
 
-  // Why: probed on open — Paste only appears when the OS clipboard actually
-  // holds file references, mirroring how Explorer/Finder behave.
+  // Why: render instantly from the warm cache (a fresh Windows probe takes
+  // hundreds of ms), then reconcile when the on-open probe lands. Paste only
+  // appears when the OS clipboard actually holds file references.
   useEffect(() => {
     if (!open) {
       setPastablePaths([])
       return
     }
+    setPastablePaths(getCachedPastableClipboardFilePaths())
     let cancelled = false
     void getPastableClipboardFilePaths().then((paths) => {
       if (!cancelled) {

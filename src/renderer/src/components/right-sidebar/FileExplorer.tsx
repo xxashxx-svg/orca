@@ -14,7 +14,10 @@ import {
   shouldResetFileExplorerForVisibleWorktree
 } from './file-explorer-reset'
 import { FileExplorerBackgroundMenu } from './FileExplorerBackgroundMenu'
-import { pasteFilesIntoExplorerDirectory } from './file-explorer-clipboard-paste'
+import {
+  getPastableClipboardFilePaths,
+  pasteFilesIntoExplorerDirectory
+} from './file-explorer-clipboard-paste'
 import { FileExplorerNameFilter } from './FileExplorerNameFilter'
 import { FileExplorerQueryStrip } from './FileExplorerQueryStrip'
 import { FileExplorerToolbar } from './FileExplorerToolbar'
@@ -543,6 +546,17 @@ function FileExplorerFiles(): React.JSX.Element {
   )
 
   const handleDuplicate = useFileDuplicate({ activeWorktreeId, worktreePath, refreshDir })
+  // Why: copying externally means leaving Orca, so refreshing the pastable
+  // cache on window focus keeps the context-menu Paste item instant instead
+  // of popping in after the slow Windows clipboard probe.
+  useEffect(() => {
+    void getPastableClipboardFilePaths()
+    const refreshPastable = (): void => {
+      void getPastableClipboardFilePaths()
+    }
+    window.addEventListener('focus', refreshPastable)
+    return () => window.removeEventListener('focus', refreshPastable)
+  }, [])
   const handlePasteFiles = useCallback(
     (sourcePaths: string[], destinationDir: string) => {
       if (!activeWorktreeId || !worktreePath) {

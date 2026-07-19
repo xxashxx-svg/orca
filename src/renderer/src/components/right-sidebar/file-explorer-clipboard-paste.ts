@@ -5,14 +5,40 @@ import { importExternalPathsToRuntime } from '@/runtime/runtime-file-client'
 import { translate } from '@/i18n/i18n'
 import { getRightSidebarWorktreeRuntimeSettings } from './file-explorer-runtime-owner'
 
+// Why: the Windows probe spawns PowerShell (hundreds of ms), which made the
+// Paste item pop into an already-open menu. A warm cache — refreshed on
+// window focus, after in-app copies, and on menu open — lets menus render
+// Paste instantly and correct themselves if a late probe disagrees.
+let cachedPastablePaths: string[] = []
+let lastProbeStartedAt = 0
+let inflightProbe: Promise<string[]> | null = null
+const PROBE_MIN_INTERVAL_MS = 1500
+
+/** Last known clipboard file references — synchronous, for instant menus. */
+export function getCachedPastableClipboardFilePaths(): string[] {
+  return cachedPastablePaths
+}
+
 /** File references currently on the OS clipboard, or [] when nothing pastable
- *  (also on any read failure — callers use this to hide the Paste item). */
-export async function getPastableClipboardFilePaths(): Promise<string[]> {
-  try {
-    return await window.api.ui.readClipboardFilePaths()
-  } catch {
-    return []
+ *  (also on any read failure). Throttled and deduped; `force` bypasses the
+ *  throttle (used right after an in-app Copy). */
+export function getPastableClipboardFilePaths(options?: { force?: boolean }): Promise<string[]> {
+  if (inflightProbe) {
+    return inflightProbe
   }
+  if (!options?.force && Date.now() - lastProbeStartedAt < PROBE_MIN_INTERVAL_MS) {
+    return Promise.resolve(cachedPastablePaths)
+  }
+  lastProbeStartedAt = Date.now()
+  inflightProbe = window.api.ui
+    .readClipboardFilePaths()
+    .catch(() => [] as string[])
+    .then((paths) => {
+      cachedPastablePaths = paths
+      inflightProbe = null
+      return paths
+    })
+  return inflightProbe
 }
 
 /** Paste clipboard files into an explorer directory via the same import

@@ -39,7 +39,10 @@ import { useShortcutLabel } from '@/hooks/useShortcutLabel'
 import { detectLanguage } from '@/lib/language-detect'
 import { getFileTypeIcon } from '@/lib/file-type-icons'
 import { openFileInBrowserTab } from '@/lib/file-preview'
-import { getPastableClipboardFilePaths } from './file-explorer-clipboard-paste'
+import {
+  getCachedPastableClipboardFilePaths,
+  getPastableClipboardFilePaths
+} from './file-explorer-clipboard-paste'
 import {
   encodeWorkspaceFilePaths,
   WORKSPACE_FILE_PATH_MIME,
@@ -491,7 +494,11 @@ export function FileExplorerRow({
     void downloadRemoteFile(node, downloadTarget)
   }, [connectionId, node, runtimeDownloadContext])
   const handleCopyFile = useCallback(() => {
-    void copyFileToOsClipboard(node, connectionId)
+    // Why: re-probe right after our own copy so Paste is warm before the
+    // user's next right-click instead of popping in late.
+    void copyFileToOsClipboard(node, connectionId).then(() =>
+      getPastableClipboardFilePaths({ force: true })
+    )
   }, [connectionId, node])
   // Why: probed on menu open — Paste only appears when the OS clipboard
   // actually holds file references, mirroring Explorer/Finder.
@@ -508,6 +515,8 @@ export function FileExplorerRow({
           setPastablePaths([])
           return
         }
+        // Why: instant render from the warm cache; the probe reconciles late.
+        setPastablePaths(getCachedPastableClipboardFilePaths())
         void getPastableClipboardFilePaths().then((paths) => {
           if (pasteProbeGenerationRef.current === probeGeneration) {
             setPastablePaths(paths)
