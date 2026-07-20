@@ -2801,10 +2801,14 @@ const WorktreeSplitSurface = React.memo(function WorktreeSplitSurface({
         focusedGroupId={focusedGroupId}
         isWorktreeActive={isVisible}
         workspacePaneControls={isVisible ? (workspacePaneControls ?? null) : null}
-        // Why: chrome overlays live at the WINDOW edges — only the outermost
-        // panes of a split reserve strip space for them.
-        reserveWindowLeftChrome={!splitFrame || splitFrame.left <= 0.1}
-        reserveWindowRightChrome={!splitFrame || splitFrame.left + splitFrame.width >= 99.9}
+        // Why: the sidebar toggles and window controls float along the window's
+        // TOP edge only — a bottom-row pane touching a side edge sits below them,
+        // so it must not reserve their strip space (that phantom gap shoved the
+        // pane's own maximize/close controls inward).
+        reserveWindowLeftChrome={!splitFrame || (splitFrame.left <= 0.1 && splitFrame.top <= 0.1)}
+        reserveWindowRightChrome={
+          !splitFrame || (splitFrame.left + splitFrame.width >= 99.9 && splitFrame.top <= 0.1)
+        }
       />
       <TerminalPaneOverlayLayer
         worktreeId={worktreeId}
